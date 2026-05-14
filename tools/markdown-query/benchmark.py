@@ -132,7 +132,9 @@ def collect_baseline_text(repo_root: Path, roots: list[str],
         base = (repo_root / r).resolve()
         if not base.exists():
             continue
-        for p in sorted(base.rglob("*.md")):
+        for p in sorted(
+            list(base.rglob("*.md")) + list(base.rglob("*.markdown"))
+        ):
             rel_parts = p.relative_to(repo_root).parts
             if any(part in _DEFAULT_EXCLUDED_PARTS for part in rel_parts):
                 continue
@@ -175,7 +177,9 @@ def baseline_full(repo_root: Path, roots: list[str],
         base = (repo_root / r).resolve()
         if not base.exists():
             continue
-        for p in sorted(base.rglob("*.md")):
+        for p in sorted(
+            list(base.rglob("*.md")) + list(base.rglob("*.markdown"))
+        ):
             rel_parts = p.relative_to(repo_root).parts
             if any(part in _DEFAULT_EXCLUDED_PARTS for part in rel_parts):
                 continue

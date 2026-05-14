@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,6 +20,26 @@ except Exception:  # pragma: no cover
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 FENCE_RE = re.compile(r"^(`{3,}|~{3,})")
+
+# Directory names that are pruned from the recursive walk by default.
+# These are virtual environments, dependency caches, build outputs and the
+# index's own scratch directory — files inside them are almost never the
+# documentation an author wants to search.
+DEFAULT_EXCLUDE_DIRS: frozenset[str] = frozenset({
+    ".git",
+    "node_modules",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".mdq",
+    "dist",
+    "build",
+    ".next",
+    ".cache",
+})
+
+# Markdown file extensions that are indexed.
+MARKDOWN_EXTENSIONS: tuple[str, ...] = (".md", ".markdown")
 
 
 def _segment_by_fence(lines: list[str]) -> list[tuple[str, list[str]]]:
@@ -386,13 +407,31 @@ def scan_file(repo_root: Path, file_path: Path,
 
 
 def iter_markdown(root: Path, roots: Iterable[str]) -> Iterable[Path]:
+    """Yield Markdown files under each *roots* entry beneath *root*.
+
+    Both ``*.md`` and ``*.markdown`` are emitted. Well-known dependency,
+    build and VCS directories (see :data:`DEFAULT_EXCLUDE_DIRS`) are pruned
+    from the recursive walk so the index does not get polluted by, e.g.,
+    ``node_modules`` or ``.venv``. The pruning is name-based: a directory
+    whose basename matches an entry in ``DEFAULT_EXCLUDE_DIRS`` is skipped
+    entirely (its subtree is not descended into).
+
+    Note: if a user explicitly passes one of those names via ``--root``,
+    that root is still scanned — the pruning only applies to *descendants*
+    of the walked base directory.
+    """
     for r in roots:
         base = (root / r).resolve()
-        if not base.exists():
+        if not base.exists() or not base.is_dir():
             continue
-        for p in base.rglob("*.md"):
-            if p.is_file():
-                yield p
+        for dirpath, dirnames, filenames in os.walk(base):
+            # Prune excluded directories in-place so os.walk does not
+            # descend into them (this is the documented behaviour of
+            # os.walk when topdown=True, which is the default).
+            dirnames[:] = [d for d in dirnames if d not in DEFAULT_EXCLUDE_DIRS]
+            for fn in filenames:
+                if fn.endswith(MARKDOWN_EXTENSIONS):
+                    yield Path(dirpath) / fn
 
 
 def _sha1_bytes(b: bytes) -> str:

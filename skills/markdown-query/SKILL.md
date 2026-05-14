@@ -15,7 +15,7 @@ metadata:
 ## 目的
 - ローカル完結（外部 API なし）で Markdown 群に対する横断クエリを行う。
 - Copilot / Custom Agent の **Context Window 消費を最小化** するため、ヒットしたチャンクの **小さな snippet（既定 ±2 行）** のみを返す。
-- 索引対象既定: **カレントディレクトリ（リポジトリルート）配下の全 `.md` / `.markdown` ファイル**。既定除外: `.git`, `node_modules`, `.venv`, `venv`, `__pycache__`, `.mdq`, `dist`, `build`, `.next`, `.cache`（`--exclude` で追加可、`--no-default-excludes` で無効化可、`.gitignore` 尊重は既定 on）。
+- 索引対象既定: **カレントディレクトリ（リポジトリルート）配下の全 `.md` / `.markdown` ファイル**。既定除外ディレクトリ: `.git`, `node_modules`, `.venv`, `venv`, `__pycache__`, `.mdq`, `dist`, `build`, `.next`, `.cache`（再帰走査時に名前一致でプルーニングされる）。任意の root に絞りたい場合は `mdq index --root docs --root knowledge` のように指定する。
 
 ## Non-goals（このスキルの範囲外）
 - Markdown の編集 / 生成
@@ -27,7 +27,7 @@ metadata:
 
 ## 手順サマリ
 1. **索引（初回 or 変更後）**: `mdq index`
-   - 既定でカレントディレクトリを再帰走査し、既定除外と `.gitignore` を尊重して `.md` / `.markdown` を索引化。
+   - 既定でカレントディレクトリを再帰走査し、既定除外ディレクトリ（`.git`, `node_modules`, `.venv`, `venv`, `__pycache__`, `.mdq`, `dist`, `build`, `.next`, `.cache`）を name 一致でプルーニングして `.md` / `.markdown` を索引化。
    - 増分更新（SHA-1 + mtime 一致ファイルはスキップ）
    - 既定で自動 prune（ディスク上に存在しないファイルのチャンクを削除、`--no-prune` で無効化可）
    - **重要**: 索引ファイル `.mdq/index.sqlite` はセッション間で共有されない前提。**この Skill を使う前に必ず 1 回実行すること**。`.gitignore` に `.mdq/` を追加することを推奨。

@@ -22,20 +22,10 @@ from pathlib import Path
 
 from . import indexer, search as searcher, store
 
-# Default index roots. Missing directories are silently skipped by the indexer,
-# so it is safe to list folders that only exist on some workspaces.
-DEFAULT_ROOTS = [
-    "docs",
-    "docs-generated",
-    "users-guide",
-    "template",
-    "knowledge",
-    "qa",
-    "original-docs",
-    "work",
-    "sample",
-    "session-state",
-]
+# Default index root. The indexer walks the current working directory
+# recursively, pruning a small set of well-known dependency / build directories
+# (see ``indexer.DEFAULT_EXCLUDE_DIRS``). Pass ``--root`` to override.
+DEFAULT_ROOTS = ["."]
 
 
 def _add_db_arg(p: argparse.ArgumentParser) -> None:
