@@ -199,8 +199,8 @@ mdq index
 ```
 
 - 既定でカレントディレクトリを再帰走査し、`.md` / `.markdown` を索引化します。
-- 既定除外: `.git`, `node_modules`, `.venv`, `venv`, `__pycache__`, `.mdq`, `dist`, `build`, `.next`, `.cache`
-- `.gitignore` は既定で尊重されます。
+- 既定除外ディレクトリ: `.git`, `node_modules`, `.venv`, `venv`, `__pycache__`, `.mdq`, `dist`, `build`, `.next`, `.cache`（名前一致で再帰走査時にプルーニングされます）。
+- 索引対象を特定のディレクトリに絞りたい場合は `mdq index --root docs --root knowledge` のように `--root` を繰り返し指定します。
 - `.mdq/` 自体を `.gitignore` に追加することを推奨します。
 
 ### 2. インデックスの更新

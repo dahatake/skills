@@ -15,14 +15,14 @@ mdq index [--root PATH ...] [options]
 |---|---|---|
 | `--root` | カレントディレクトリ（再帰） | 索引対象ルート。繰り返し指定可。 |
 | `--rebuild` | off | SHA-1 が同一でも強制再索引。 |
-| `--exclude GLOB` | なし | 既定除外に追加する除外パターン。複数指定可。 |
-| `--no-default-excludes` | off | 既定除外（下記）を無効化。 |
-| `--respect-gitignore` / `--no-respect-gitignore` | on | `.gitignore` を尊重するかどうか。 |
-| `--ext` | `.md`, `.markdown` | 索引対象拡張子。繰り返し指定で追加。 |
-| `--follow-symlinks` | off | シンボリックリンクを辿る。 |
 | `--no-prune` | off | ディスク上に存在しないファイルのチャンク削除を抑止。 |
+| `--max-chunk-chars N` | `0`（無効） | 1 チャンクの上限文字数。超過時は段落／行境界で再分割（コードフェンスは分割しない）。 |
 
-**既定除外**: `.git`, `node_modules`, `.venv`, `venv`, `__pycache__`, `.mdq`, `dist`, `build`, `.next`, `.cache`
+**索引対象拡張子**: `.md`, `.markdown`（固定）
+
+**既定除外ディレクトリ**: `.git`, `node_modules`, `.venv`, `venv`, `__pycache__`, `.mdq`, `dist`, `build`, `.next`, `.cache`（再帰走査時に名前一致でプルーニング）
+
+> 既定除外を上書きするフラグ（`--exclude` / `--no-default-excludes`）や `.gitignore` 尊重、シンボリックリンク追従は現状未実装です。除外を絞りたい場合は `--root` で対象ディレクトリを明示してください。
 
 出力（JSON）: `{"files_indexed": N, "files_skipped": M, "chunks_written": K, "roots": [...]}`
 

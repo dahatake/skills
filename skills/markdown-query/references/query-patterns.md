@@ -41,7 +41,7 @@ mdq list --paths "docs/**" --heading-level 2
 mdq list --heading-level 1 --limit 100
 ```
 
-## 9. 除外を増やして再索引
+## 9. 索引対象を絞って再索引
 ```
-mdq index --exclude "**/fixtures/**" --exclude "**/snapshots/**"
+mdq index --root docs --root knowledge
 ```
