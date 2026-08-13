@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "_comment": "HVE Tool Search ランキングポリシー（FR-TS-03 / FR-TS-04）。キーは常に ToolEntry.id 形式 '{kind}:{server}:{name}' か、サーバーワイルドカード '{kind}:{server}:*'。ツール名だけのキーは受け付けない（MCP サーバー間で名前が衝突しうるため）。Core/Long-tail の振り分け根拠は work/hve-tool-search/contracts/core-tool-selection.md を参照。",
+
+  "limit": 5,
+  "max_limit": 10,
+  "tau": 0.4,
+
+  "field_weights": {
+    "name": 3.0,
+    "additional_search_text": 2.5,
+    "description": 2.0,
+    "arg_terms": 1.0
+  },
+
+  "pins": {
+    "native:hve:*": "always",
+    "skill:skills:skill_agent-common-preamble": "always",
+    "skill:skills:skill_work-artifacts-layout": "always",
+    "skill:skills:skill_task-dag-planning": "always",
+    "mcp:azure:*": "auto",
+    "mcp:microsoft-learn:*": "auto"
+  },
+
+  "additional_search_text": {
+    "native:hve:search_markdown": "仕様 要件 ドキュメント 設計書 横断検索 マークダウン docs 参照 根拠",
+    "native:hve:search_code": "実装 どこで定義 呼び出し元 シンボル ソースコード 関数 クラス 追跡",
+    "native:hve:find_code_references": "参照元 呼び出し箇所 利用箇所 影響範囲 caller リファレンス",
+    "native:hve:open_evidence": "証跡 根拠 引用 該当箇所 evidence 開く",
+    "mcp:microsoft-learn:*": "公式ドキュメント Microsoft Learn Azure 技術情報 API リファレンス 手順 制限 クォータ",
+    "skill:skills:skill_work-artifacts-layout": "成果物 置き場所 出力先 パス規則 保存先 ディレクトリ構造 命名規則 どこに置く",
+    "skill:skills:skill_task-dag-planning": "計画 見積 分割 依存関係 スケジュール タスク分解",
+    "skill:skills:skill_harness-error-recovery": "エラー 失敗 復旧 リカバリ 立て直し 障害対応",
+    "skill:skills:skill_harness-safety-guard": "破壊的操作 危険 削除 上書き 事前チェック 安全確認",
+    "skill:skills:skill_harness-verification-loop": "ビルド テスト 静的解析 検証 品質確認 セルフチェック"
+  },
+
+  "step_overrides": {
+    "asdw-web:1.2": { "mode": "pin_only" },
+    "asdw-web:1.3": { "mode": "pin_only" }
+  }
+}

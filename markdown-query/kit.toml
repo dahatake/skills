@@ -1,0 +1,17 @@
+# Distribution kit manifest for the `markdown-query` Skill.
+#
+# The setup and sync logic itself lives in the bundled `kit/` directory;
+# this file carries only the values that differ between kits.
+
+[kit]
+engine = "mdq"
+skill = "markdown-query"
+venv = ".venv-mdq-gui"
+config = "mdq.toml"
+init_config = "init_config.py"
+config_supports_profile = false
+
+base_dependencies = ["rank_bm25>=0.2.2", "tiktoken>=0.7.0"]
+gui_dependencies = ["PySide6>=6.6"]
+watch_dependencies = ["watchdog>=4.0"]
+tokenizer_dependencies = ["tiktoken>=0.7.0"]

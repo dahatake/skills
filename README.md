@@ -1,600 +1,366 @@
 # dahatake/skills
 
-コーディングエージェント向けの **スキル集** を提供するプラグインです。
-GitHub Copilot CLI、Claude Code、Gemini CLI、および [APM](https://github.com/microsoft/apm) 対応の各種ハーネスから同じスキルを利用できます。
+コーディングエージェントの **Context Window 消費を抑える** ためのツール集です。3 つのツールをそれぞれ独立して、自分のリポジトリへ導入できます。すべてローカル完結で動作し、外部 API を呼びません。
 
-> **注意**: 各スキルは SKILL.md の配布のみで完結しないものがあります。例えば `markdown-query` は別途 `mdq` CLI のインストールが必要です（[`setup/` スクリプト](#setup-スクリプトでのスキル別追加導入) 参照）。プラグインを入れただけでは動作しない点にご注意ください。
+| ツール | 何をするか | 形態 | 詳細 |
+|---|---|---|---|
+| **markdown-query** | Markdown 群を横断検索し、ヒットした見出し単位の小さな snippet だけを返す | Skill（`.github/skills/` へ配置） | [docs/markdown-query.md](docs/markdown-query.md) |
+| **code-query** | ソースコードを横断検索し、定義・参照・小さな snippet だけを返す | Skill（`.github/skills/` へ配置） | [docs/code-query.md](docs/code-query.md) |
+| **tool-search** | Copilot SDK セッションへ渡すツール定義を、必要なものだけに絞る | ライブラリ（アプリケーションへ組み込む） | [docs/tool-search.md](docs/tool-search.md) |
 
-## 提供スキル
+`markdown-query` と `code-query` は索引対象が排他です。`.md` と CSV / TSV は `markdown-query`、ソースコードは `code-query` が担当します。
 
-| スキル | 概要 |
-| --- | --- |
-| [`markdown-query`](skills/markdown-query/SKILL.md) | ローカル完結で Markdown 群を横断検索し、ヒットしたチャンクのみを返して Context Window を節約します（BM25 / grep / タグ検索対応）。 |
+> **tool-search は実験的です。** 現行の Copilot CLI では遅延公開が発火せず、差し替えを有効にするとトークンが増えるという実測があります。常時有効化する前に [docs/tool-search.md](docs/tool-search.md#6-既知の制約) を必ず読んでください。
 
 ---
 
-## `markdown-query` スキル詳細
+## 目次
 
-> 「初めてこのリポジトリを触る人」向けに、**何が用意されているのか / 何ができるのか / どういう場合に使うのか** を最初にまとめます。手順だけ知りたい方は [使用方法（`markdown-query`）](#使用方法markdown-query) まで読み飛ばして構いません。
+1. [前提条件](#1-前提条件)
+2. [インストール](#2-インストール)
+3. [インストール後にやること](#3-インストール後にやること)
+4. [動作確認](#4-動作確認)
+5. [エージェントから使う](#5-エージェントから使う)
+6. [更新と整合性の確認](#6-更新と整合性の確認)
+7. [プラグインとしての配布（任意）](#7-プラグインとしての配布任意)
+8. [リポジトリ構成](#8-リポジトリ構成)
+9. [開発とメンテナンス](#9-開発とメンテナンス)
 
-### 何ができるのか（What）
+---
 
-`markdown-query` は、リポジトリ内の Markdown 群（仕様書、設計書、ナレッジ、README など）を **ローカル完結で横断検索** し、ヒットした **見出し単位の小さなチャンク（snippet）だけ** をエージェントに返すスキルです。
+## 1. 前提条件
 
-- **BM25 検索**: 自然言語クエリで関連度順に上位 N 件を返す。
-- **grep 検索**: 完全一致 / 厳密一致したいキーワードに使う。
-- **タグ / パス絞り込み**: frontmatter の `tags` や `docs/**` のような glob で範囲限定。
-- **見出し階層の俯瞰**: `mdq list` でファイル横断の見出し一覧を取得。
-- **本文取得**: `mdq get --chunk-id <ID>` で必要な箇所だけ完全な本文を取り出せる。
+| 項目 | 要件 | 備考 |
+|---|---|---|
+| OS | Windows / macOS / Linux | — |
+| シェル | PowerShell 7+（`pwsh`）または bash | 本文の Windows 向けコマンドは `pwsh` 前提。Windows PowerShell 5.1 しか無い場合は §2.4 を参照 |
+| Python | 3.11 以上 | 未導入ならインストーラが winget / Homebrew / apt などで導入を試みる |
+| git | 必須 | `code-query` は `git ls-files` で対象ファイルを列挙するため、導入先が git 管理下である必要がある |
 
-### なぜ使うのか（Why）
+導入先リポジトリは `git init` 済みにしておいてください。`code-query` はさらに **ソースコードが 1 つ以上存在する** ことを前提とします（ドキュメントしか無いリポジトリでは導入不要です）。
 
-LLM ベースのコーディングエージェントでは、関連 Markdown を **丸ごと Context に投入すると Context Window を大量消費** し、コスト・速度・回答品質（noise）すべてに悪影響が出ます。
+## 2. インストール
 
-- 「全文を `read_file` させる」 → 数万トークン消費、関係ない章まで読まれる。
-- `markdown-query` 経由 → 該当チャンク数百〜千トークン程度に圧縮されて投入される。
+各ツールは自己完結した「キット」として配布されます。キットのディレクトリを自分のリポジトリへコピーし、その中のインストーラを実行するだけです。**必要なツールだけを入れられます**。
 
-実測結果は [評価方法（ベンチマーク）](#評価方法ベンチマーク) を参照してください。
+### 2.1 キットを取得する
 
-### どういう場合に使うのか（When）
-
-- 複数の Markdown（仕様書群、ナレッジベース、複数 README）を **横断的に参照したい** とき。
-- エージェントに「このリポジトリの仕様に従って実装して」と依頼する前に、**関連箇所だけを切り出して渡したい** とき。
-- Context Window を節約しつつ、**引用元 (`path:lines`) を明示** したいとき。
-
-逆に **使わないケース**:
-
-- Markdown を編集・生成したい（このスキルは読み取り専用）。
-- クラウド埋め込み / リモートベクトル検索を使いたい（本スキルは外部 API を呼びません）。
-- 単一の小さな README を眺めたいだけ（普通に開いた方が速い）。
-
-### アーキテクチャ概要
-
-`markdown-query` の実体は本リポジトリ同梱の `mdq/` Python パッケージです。**ローカル完結**（外部 API を呼び出さず、`.mdq/` 配下に SQLite で永続化）であり、CLI・エージェント (Copilot / Claude / Gemini) のいずれからも `python -m mdq` サブプロセスとして起動されます。
-
-```mermaid
-flowchart LR
-  A["エージェント / ユーザー CLI"] -->|"python -m mdq ..."| B["mdq/cli.py (サブコマンド振り分け)"]
-  B --> C["indexer.py + strategies*.py<br/>(Chunking)"]
-  B --> D["query_router.py + search.py<br/>(BM25 検索 + snippet 生成)"]
-  B --> E["watcher.py (任意, 増分監視)"]
-  C --> F[(".mdq/index-&lt;lang&gt;-&lt;strategy&gt;.sqlite")]
-  D --> F
-  E --> C
-  B -. "append" .-> G[(".mdq/usage.jsonl")]
+```powershell
+# Windows
+git clone https://github.com/dahatake/skills.git $env:TEMP\dahatake-skills
 ```
 
-主な構成要素:
+```bash
+# macOS / Linux
+git clone https://github.com/dahatake/skills.git /tmp/dahatake-skills
+```
 
-| 層 | モジュール | 役割 |
-|---|---|---|
-| CLI | `mdq/__main__.py`, `mdq/cli.py` | argparse でサブコマンド (`index` / `search` / `get` / `list` / `stats` / `watch`) を振り分け、利用ログを記録 |
-| Indexing | `indexer.py`, `strategies.py`, `strategies_semantic.py`, `strategies_pageindex.py` | Markdown を Chunking Strategy ごとに分割し、SQLite に upsert |
-| Search | `query_router.py`, `search.py` | クエリを 7 ルールで分類して strategy 選定 → BM25 検索 → snippet 生成 |
-| Watcher | `watcher.py`（任意、`watchdog` が必要） | ファイル変更を daemon thread で監視し増分索引 |
-| Storage | `store.py` + `.mdq/index-<lang>-<strategy>.sqlite` | SCHEMA v6。`(lang, strategy)` の組み合わせごとに独立した DB ファイル |
-| Logging | `usage_log.py` + `.mdq/usage.jsonl` | 全 CLI 呼び出しを append-only JSONL に記録（任意の統計レポート生成に使用） |
+### 2.2 自分のリポジトリへ配置する
 
-設計上の前提:
+キットは 1 つのディレクトリに集約しておくと管理しやすくなります（例では `tools/kits/`）。**必要なものだけ**をコピーしてください。
 
-- **物理ファイル分離**: 索引 DB は `(lang, strategy)` の組み合わせごとに別ファイル。検索時に Strategy だけを切り替えれば適切な DB が選択されます。
-- **任意拡張**: `watchdog`（Watcher）、`rank_bm25`（高速 BM25）、`fastembed + nltk + numpy`（`semantic_paragraph` 戦略）はいずれも任意依存。未導入時はフォールバック動作します。
-
-### スキルパッケージに含まれるもの
-
-| パス | 内容 |
-| --- | --- |
-| [`skills/markdown-query/SKILL.md`](skills/markdown-query/SKILL.md) | スキル本体。エージェントが読み込むトリガー定義と手順サマリ。 |
-| [`skills/markdown-query/references/cli-reference.md`](skills/markdown-query/references/cli-reference.md) | `mdq` CLI の全サブコマンド・全オプション仕様。 |
-| [`skills/markdown-query/references/query-patterns.md`](skills/markdown-query/references/query-patterns.md) | よくあるクエリ例（タグ絞り込み、grep、見出し俯瞰など）。 |
-| [`skills/markdown-query/references/indexing-internals.md`](skills/markdown-query/references/indexing-internals.md) | 索引のデータモデルとチャンク分割ルール（高度な利用者向け）。 |
-| [`skills/markdown-query/examples/prompt-snippets.md`](skills/markdown-query/examples/prompt-snippets.md) | Copilot Chat / Custom Agent に組み込む際のプロンプト例。 |
-| [`mdq/`](mdq/) | スキルが内部で呼び出す Python 製 CLI 本体。 |
-| [`setup/setup-markdown-query.{ps1,sh}`](setup/) | `mdq` を `.venv` にインストールするセットアップスクリプト。 |
-| [`tools/markdown-query/`](tools/markdown-query/) | Context 削減効果を数値で確認するためのベンチマーク CLI。 |
-
-## インストール
-
-### 前提条件
-
-- Git CLI（全インストール経路で必須）
-- Node.js 18+ （`npx skills` 経由でインストールする場合のみ必須）
-- Python 3.11+（`markdown-query` の `mdq` CLI を利用する場合のみ必須）
-
-各エージェント CLI（`copilot` / `claude` / `gemini` / `apm`）は事前にインストールしておいてください。
-
-### APM（複数ハーネス対応）
-
-[APM](https://github.com/microsoft/apm) を使うと、1 コマンドで複数のエージェント環境に導入できます。
+```powershell
+# Windows。以下は 3 つとも入れる例
+cd C:\path\to\your-repo
+New-Item -ItemType Directory -Force -Path tools\kits | Out-Null
+Copy-Item -Recurse "$env:TEMP\dahatake-skills\markdown-query" tools\kits\markdown-query
+Copy-Item -Recurse "$env:TEMP\dahatake-skills\code-query"    tools\kits\code-query
+Copy-Item -Recurse "$env:TEMP\dahatake-skills\tool-search"   tools\kits\tool-search
+```
 
 ```bash
+# macOS / Linux
+cd /path/to/your-repo
+mkdir -p tools/kits
+cp -r /tmp/dahatake-skills/markdown-query tools/kits/markdown-query
+cp -r /tmp/dahatake-skills/code-query     tools/kits/code-query
+cp -r /tmp/dahatake-skills/tool-search    tools/kits/tool-search
+```
+
+> ディレクトリごとコピーしてください。`vendor/` を含めずにコピーするとエンジンが欠けて動作しません。
+
+### 2.3 `.gitignore` に追記する
+
+索引・venv・ログ・キャッシュはコミットしません。**次の `git add` より前に** 追記してください（`.gitignore` はすでに追跡されているファイルには効きません）。
+
+```gitignore
+.mdq/
+.cq/
+.toolsearch/
+.venv-*/
+__pycache__/
+```
+
+### 2.4 インストーラを実行する
+
+**導入先リポジトリのルートで** 実行します。入れたいツールの分だけ実行してください。
+
+```powershell
+# Windows
+pwsh -NoLogo -NoProfile -File tools\kits\markdown-query\install.ps1
+pwsh -NoLogo -NoProfile -File tools\kits\code-query\install.ps1
+pwsh -NoLogo -NoProfile -File tools\kits\tool-search\install.ps1
+```
+
+```bash
+# macOS / Linux
+bash tools/kits/markdown-query/install.sh
+bash tools/kits/code-query/install.sh
+bash tools/kits/tool-search/install.sh
+```
+
+`pwsh` が無く Windows PowerShell 5.1 しか使えない場合は、同じスクリプトを次の形で実行します。
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File tools\kits\markdown-query\install.ps1
+```
+
+`code-query` はソースコードが 1 つも見つからないリポジトリではインストールに失敗します（何が足りないかはエラーメッセージに出ます）。ドキュメントだけのリポジトリでは導入不要です。
+
+インストーラは Python 3.11+ と git を確認し（無ければ OS のパッケージマネージャで導入を試み）、キット内に venv を作り、依存を入れ、設定ファイルを生成し、Skill を配置し、初回索引まで行います（`tool-search` は venv 作成のみで、設定生成・Skill 配置・索引は行いません）。
+
+> `code-query` は依存のダウンロード（tree-sitter 文法など数十 MB）を済ませてから設定を生成します。ソースコードが無いリポジトリではその後に失敗するので、先に導入の必要性を確認してください。
+
+主なオプション（3 キット共通）:
+
+| Windows | macOS / Linux | 意味 |
+|---|---|---|
+| `-RepoRoot <PATH>` | `--repo-root <PATH>` | 導入先リポジトリのルート（既定: カレントディレクトリ） |
+| `-SkipPrereq` | `--skip-prereq` | Python / git の自動導入を行わない（すでに入っている環境向け） |
+| `-WithGui` | `--with-gui` | 設定 GUI（PySide6）も導入する |
+| `-WithWatch` | `--with-watch` | ファイル監視による増分索引を導入する |
+| `-WithTokenizer` | `--with-tokenizer` | `tiktoken` を導入し、トークン計測を正確にする |
+| `-NoIndex` | `--no-index` | 初回索引を省略する |
+| `-NoSkill` | `--no-skill` | `.github/skills/` への配置を省略する |
+| `-NoExtras` | `--no-extras` | 追加依存の導入を省略する（`code-query` の tree-sitter 文法） |
+| `-Force` | `--force` | 既存の設定ファイル / Skill 定義を再生成する |
+| `-NoVenv` | `--no-venv` | venv を作らず、指定の Python をそのまま使う（依存の導入も行わない） |
+| `-Python <PATH>` | `--python <PATH>` | 使う Python を明示指定する |
+| `-Version` | — | 導入済みの版を表示して終了する |
+| `-Verify` | — | 同梱ファイルの改変・欠落を調べて終了する |
+
+Python を自分で用意していて OS への導入を避けたい場合は `-SkipPrereq` / `--skip-prereq` を付けてください。Debian / Ubuntu で `python3-venv` が入っていない環境では、`--no-venv` を使うか `python3-venv` を先に導入してください。
+
+### 2.5 何が作られるか
+
+| パス | 作るツール | 内容 |
+|---|---|---|
+| `<repo>/mdq.toml` | markdown-query | 索引対象の設定 |
+| `<repo>/cq.toml` | code-query | プロファイル（索引対象）の設定 |
+| `<repo>/.github/skills/markdown-query/` | markdown-query | Skill 定義（エージェントが読む） |
+| `<repo>/.github/skills/code-query/` | code-query | Skill 定義（エージェントが読む） |
+| `<repo>/.mdq/` | markdown-query | SQLite 索引と利用ログ |
+| `<repo>/.cq/` | code-query | SQLite 索引と利用ログ |
+| `<repo>/.toolsearch/` | tool-search | イベント・利用履歴（実行時に生成） |
+| `<kit>/.venv-*/` | すべて | 依存を隔離した venv |
+
+## 3. インストール後にやること
+
+### 3.1 生成された設定を確認する
+
+インストーラは実ファイル構成を走査して設定を提案します。**索引したくないディレクトリが入っていないか必ず確認してください**。
+
+```powershell
+Get-Content mdq.toml
+Get-Content cq.toml
+```
+
+`mdq.toml` の `[index].roots` / `[index].exclude`、`cq.toml` の `roots` / `exclude` を調整したら、索引を作り直します。
+
+```powershell
+tools\kits\markdown-query\mdq.ps1 index
+tools\kits\code-query\cq.ps1 index
+```
+
+```bash
+bash tools/kits/markdown-query/mdq.sh index
+bash tools/kits/code-query/cq.sh index
+```
+
+> キット自身のディレクトリと venv は、生成される設定の対象外になります（キットが索引ルートの配下にある場合は `exclude` が生成され、そうでなければそもそもルートに入りません）。
+
+### 3.2 `tool-search` のポリシーを差し替える
+
+同梱の `policy.json` には上流リポジトリの pin と語彙が入ったままです。**同梱物をコピーしてから編集してください**。必須フィールドが欠けた `policy.json` は読み込まれず、SDK 既定の振る舞いへ黙って戻ります。
+
+```powershell
+# Windows
+New-Item -ItemType Directory -Force .toolsearch | Out-Null
+Copy-Item tools\kits\tool-search\vendor\toolsearch\policy.json .toolsearch\policy.json
+tools\kits\tool-search\toolsearch.ps1 policy   # 編集後に必ず実行
+```
+
+```bash
+# macOS / Linux
+mkdir -p .toolsearch
+cp tools/kits/tool-search/vendor/toolsearch/policy.json .toolsearch/policy.json
+bash tools/kits/tool-search/toolsearch.sh policy
+```
+
+`<repo>/.toolsearch/policy.json` があれば同梱物より優先されます。キーの意味は [docs/tool-search.md](docs/tool-search.md#4-ポリシーの調整) を参照。
+
+## 4. 動作確認
+
+`--q` には **自分のリポジトリに実際にある語** を入れてください。
+
+```powershell
+# Windows
+tools\kits\markdown-query\mdq.ps1 stats
+tools\kits\markdown-query\mdq.ps1 list
+tools\kits\markdown-query\mdq.ps1 search --q "<ドキュメントにある語>" --top-k 3
+tools\kits\code-query\cq.ps1 stats
+tools\kits\code-query\cq.ps1 search --q "<関数名>"
+tools\kits\tool-search\toolsearch.ps1 policy
+```
+
+```bash
+# macOS / Linux
+bash tools/kits/markdown-query/mdq.sh stats
+bash tools/kits/markdown-query/mdq.sh list
+bash tools/kits/markdown-query/mdq.sh search --q "<ドキュメントにある語>" --top-k 3
+bash tools/kits/code-query/cq.sh stats
+bash tools/kits/code-query/cq.sh search --q "<関数名>"
+bash tools/kits/tool-search/toolsearch.sh policy
+```
+
+| 症状 | 見るところ |
+|---|---|
+| `stats` が `{"files": 0}` | 設定の `roots` に対象ディレクトリが入っていない。§3.1 を見直す |
+| `stats` は非 0 なのに `search` が空（markdown-query） | 語が存在しないか、文書数が少なすぎて BM25 のスコアが 0 になっている。`mdq.ps1 list` で見出しを確認して語を選び直すか、`--mode grep` を試す |
+| `stats` は非 0 なのに `search` が空（code-query） | `cq.ps1 map` で構成を確認し、`--mode substr` や `--mode bm25` を明示する |
+| PowerShell がスクリプトを拒否する | 実行ポリシー。`.ps1` の代わりに同梱の `mdq.cmd` / `cq.cmd` / `toolsearch.cmd` を使うか、`powershell -ExecutionPolicy Bypass -File ...` で実行する |
+
+> **素の `python -m mdq` / `python -m cq` は動きません。** エンジンはキットの `vendor/` にあり、システムの Python からは見えないためです。Skill 定義やエンジンのメッセージに `python -m mdq ...` と出てきたら、同じ引数を `mdq.ps1` / `mdq.sh`（`cq` なら `cq.ps1` / `cq.sh`）へ読み替えてください。
+
+## 5. エージェントから使う
+
+`markdown-query` と `code-query` は、インストール時に `.github/skills/<name>/SKILL.md` が配置され、GitHub Copilot がそれを読み込みます。索引さえできていれば、次のように依頼するだけで呼び出されます。
+
+> このリポジトリの仕様書から「ポイント付与」の条件を探して。
+
+> `resolve_run_id` を呼んでいる箇所を全部教えて。
+
+採用率を上げるには、リポジトリ最上位のエージェント共通ルール（`.github/copilot-instructions.md` / `CLAUDE.md` / `AGENTS.md` など）へ優先順位を明記してください。
+
+```markdown
+- Markdown ファイル群を対象とした検索・横断クエリは、まず markdown-query Skill を試す。
+- ソースコードの定義・参照・横断検索は、まず code-query Skill を試す。
+- どちらも 0 ヒットまたは目的が一致しない場合に限り grep / read_file へフォールバックする。
+- Markdown やコードの編集・生成は、いずれの Skill の対象外。
+```
+
+`tool-search` はアプリケーション側のコードに配線します。手順は [docs/tool-search.md](docs/tool-search.md#3-copilot-sdk-セッションへの配線) を参照してください。
+
+## 6. 更新と整合性の確認
+
+導入済みキットの版と改変状況は、そのキットだけで確認できます。
+
+```powershell
+# Windows
+pwsh -NoLogo -NoProfile -File tools\kits\markdown-query\install.ps1 -Version
+pwsh -NoLogo -NoProfile -File tools\kits\markdown-query\install.ps1 -Verify
+```
+
+```bash
+# macOS / Linux
+python tools/kits/markdown-query/install.py --kit-dir tools/kits/markdown-query --version
+python tools/kits/markdown-query/install.py --kit-dir tools/kits/markdown-query --verify
+```
+
+- `-Version` / `--version` は同梱の版・エンジン版・コピー元を表示します。
+- `-Verify` / `--verify` は同梱ファイルのハッシュを照合し、改変・欠落を報告します。
+
+更新するときは、このリポジトリを再取得し、**古いキットを削除してから** コピーし直してインストーラを再実行します。上書きコピーだと古いファイルが残り、ディレクトリが入れ子になります。
+
+```powershell
+# Windows
+Remove-Item -Recurse -Force tools\kits\markdown-query
+Copy-Item -Recurse "$env:TEMP\dahatake-skills\markdown-query" tools\kits\markdown-query
+pwsh -NoLogo -NoProfile -File tools\kits\markdown-query\install.ps1
+```
+
+```bash
+# macOS / Linux
+rm -rf tools/kits/markdown-query
+cp -r /tmp/dahatake-skills/markdown-query tools/kits/markdown-query
+bash tools/kits/markdown-query/install.sh
+```
+
+生成済みの `mdq.toml` / `cq.toml` / Skill 定義は温存されます（`--force` を付けると再生成されます）。venv はキット内にあるため削除され、再実行時に作り直されます。
+
+## 7. プラグインとしての配布（任意）
+
+`markdown-query` / `code-query` の SKILL.md は、プラグインとしてエージェントへ配布することもできます。
+
+```bash
+# APM（複数ハーネス対応）
 apm install dahatake/skills
 ```
 
-### GitHub Copilot CLI
-
-`copilot` CLI のインタラクティブセッション内で次を実行します（初回のみマーケットプレイス追加）。
-
 ```text
+# GitHub Copilot CLI / Claude Code（対話プロンプト内）
 /plugin marketplace add dahatake/skills
 /plugin install dahatake-skills@dahatake-skills
 ```
 
-シェルから直接実行する場合:
-
 ```bash
-copilot plugin marketplace add dahatake/skills
-copilot plugin install dahatake-skills@dahatake-skills
-```
-
-更新する場合:
-
-```bash
-copilot plugin update dahatake-skills
-```
-
-インストール確認:
-
-```bash
-copilot plugin list
-```
-
-### Claude Code
-
-`claude` を起動した対話プロンプト内で次を実行します（初回のみマーケットプレイス追加）。
-
-```text
-/plugin marketplace add dahatake/skills
-/plugin install dahatake-skills@dahatake-skills
-```
-
-インストール状況は `/plugin list` で確認できます。
-
-### Gemini CLI
-
-```bash
+# Gemini CLI
 gemini extensions install https://github.com/dahatake/skills
 ```
 
-更新する場合:
+> **この経路では SKILL.md しか配布されません。** CLI 本体（`mdq` / `cq`）は含まれないため、§2 のキット導入を別途行わないと動作しません。Gemini CLI 連携は未検証です。
 
-```bash
-gemini extensions update dahatake-skills
+## 8. リポジトリ構成
+
+```
+README.md                     本ファイル
+docs/                         ツール別のドキュメント
+  markdown-query.md
+  code-query.md
+  tool-search.md
+markdown-query/               配布キット（Markdown 横断検索）
+code-query/                   配布キット（ソースコード検索）
+tool-search/                  配布キット（Copilot SDK 向けツール検索）
+skills/                       プラグイン配布用の SKILL.md（生成物）
+scripts/                      メンテナンス用スクリプト
+sample/                       検索対象のサンプル Markdown
+plugin.json                   プラグイン定義（Copilot CLI / 共通）
+apm.yml                       APM マーケットプレイス定義
+.claude-plugin/               Claude Code 用のプラグイン定義とマーケットプレイス
+gemini-extension.json         Gemini CLI 拡張定義
+.mcp.json                     MCP サーバー設定（現状は空）
+.github/workflows/verify.yml  CI（キット整合性・生成物同期・スモークインストール）
 ```
 
-> **Gemini CLI 連携は未検証です**。`gemini-extension.json` は最小構成（name / version / description）のみで提供しており、Gemini CLI 側で `skills/` 配下が自動認識されるかは環境により異なる可能性があります。動作確認できない場合は手動インストールまたは `setup/` スクリプトをご利用ください。
+各キットの構成は共通です。
 
-> **Codex CLI について**: 本レビュー時点（2026 年 5 月）の [openai/codex](https://github.com/openai/codex) には公式のプラグインマーケットプレイス機能はありません。Codex CLI から本リポジトリのスキルを使う場合は、下記「手動インストール」または `setup/` スクリプトをご利用ください。
-
-### 手動インストール（GitHub Copilot 全般）
-
-```bash
-npx skills add https://github.com/dahatake/skills/tree/main/skills -a github-copilot -g -y
+```
+<kit>/
+  install.ps1 / install.sh / install.py   OS 別の入口と共通の導入判断
+  kit/                                    3 キットで共有するセットアップ実装
+  vendor/                                 エンジン本体（同梱）
+  skill/                                  Skill 定義の正本（tool-search には無い）
+  docs/                                   技術ドキュメント
+  KIT-VERSION.json                        同梱ファイルのハッシュと版情報
+  kit.toml                                キット固有の設定（依存・venv 名など）
+  <engine>.ps1 / <engine>.sh / <engine>.cmd   エンジン起動ラッパー
 ```
 
-### `setup/` スクリプトでのスキル別追加導入
+## 9. 開発とメンテナンス
 
-スキルによっては、CLI 等の追加コンポーネントが必要です。`setup/` 配下のスクリプトでローカル `.venv` に必要な CLI をインストールできます。
+このリポジトリ自体を変更する場合の手順です。
 
-#### `markdown-query` スキル: `mdq` CLI
-
-リポジトリをクローンしたうえで、OS に応じて次のいずれかを実行してください。
-
-**Windows (PowerShell)**
-
-```powershell
-git clone https://github.com/dahatake/skills.git
-cd skills
-./setup/setup-markdown-query.ps1
-```
-
-主なオプション:
-
-| オプション | 説明 |
-| --- | --- |
-| `-CheckOnly` | 変更を加えず、現状のみを確認する |
-| `-ForceRecreateVenv` | `.venv` の Python が 3.11 未満なら作り直す |
-| `-WithWatch` | `mdq watch` 用に `watchdog` も導入する |
-| `-From <PATH>` | PyPI ではなくローカルソースから `pip install -e` する |
-
-**macOS / Linux (bash)**
-
-```bash
-git clone https://github.com/dahatake/skills.git
-cd skills
-chmod +x ./setup/setup-markdown-query.sh
-./setup/setup-markdown-query.sh
-```
-
-主なオプション:
-
-| オプション | 説明 |
-| --- | --- |
-| `--check-only` | 変更を加えず、現状のみを確認する |
-| `--force-recreate-venv` | `.venv` の Python が 3.11 未満なら作り直す |
-| `--with-watch` | `mdq watch` 用に `watchdog` も導入する |
-| `--from PATH` | PyPI ではなくローカルソースから `pip install -e` する |
-| `-h`, `--help` | ヘルプを表示する |
-
-> 前提: Python 3.11 以上。スクリプトはリポジトリルートに `.venv` を作成し、その中に `mdq` をインストールします。インストール後はシェルで `.venv` を有効化するか、`./.venv/bin/python -m mdq ...`（Windows は `./.venv/Scripts/python.exe -m mdq ...`）の形で呼び出してください（スクリプト末尾の "Next steps" と同じ形式）。
-
-## 使用方法（`markdown-query`）
-
-`markdown-query` は `mdq` CLI を内部で呼び出します。エージェントに依頼する場合も、手動で実行する場合も、**事前にインデックスを作成しておく必要があります**。
-
-### 1. インデックスの作成（初回 / 必須）
-
-`.mdq/index.sqlite` はセッション間で共有されない前提のため、**このスキルを使う前に必ず 1 回実行してください**。検索対象のリポジトリのルートで実行します。
-
-```bash
-mdq index
-```
-
-- 既定でカレントディレクトリを再帰走査し、`.md` / `.markdown` を索引化します。
-- 既定除外: `.git`, `node_modules`, `.venv`, `venv`, `__pycache__`, `.mdq`, `dist`, `build`, `.next`, `.cache`
-- `.gitignore` は既定で尊重されます。
-- `.mdq/` 自体を `.gitignore` に追加することを推奨します。
-
-### 2. インデックスの更新
-
-ファイルを追加・編集した後はインデックスの更新が必要です。
-
-```bash
-# 増分更新（SHA-1 + mtime が一致するファイルはスキップ）
-mdq index
-
-# 削除されたファイルのチャンクも自動で prune されます（--no-prune で無効化可）
-```
-
-ファイル変更を逐次反映したい場合は、別ターミナルで watch モードを起動できます（`watchdog` が必要、`setup-markdown-query` で `-WithWatch` / `--with-watch` を指定するとインストールされます）。
-
-```bash
-mdq watch
-```
-
-### 3. 検索
-
-```bash
-mdq search --q "クエリ" --top-k 5 --max-tokens 800
-```
-
-主なオプション:
-
-| オプション | 説明 |
-| --- | --- |
-| `--q` | 検索クエリ（必須） |
-| `--top-k` | 返すヒット数（既定 5 推奨範囲 3〜5） |
-| `--max-tokens` | 出力の最大トークン数（既定 800 推奨範囲 400〜800） |
-| `--paths` | 検索対象パスを絞り込み（例: `"docs/**"`） |
-| `--tags` | frontmatter のタグで絞り込み |
-| `--mode` | `bm25`（既定） / `grep` |
-| `--snippet-radius` | ヒット行前後の表示行数（既定 ±2） |
-
-出力は JSONL（1 行 = 1 ヒット）です。
-
-### 4. 本文取得（必要時のみ）
-
-検索結果の `chunk_id` を指定して該当チャンクの本文を取得します。
-
-```bash
-mdq get --chunk-id <ID>
-```
-
-### エージェントから使う場合
-
-インデックス作成後、エージェントに次のように依頼できます。
-
-> このリポジトリ配下の Markdown から "context window" を含む見出しを探して。
-
-`markdown-query` スキルが起動し、ヒットしたチャンクのみが返ってくれば成功です。
-
-> `mdq` の代わりに `python -m mdq` でも同じサブコマンドを実行できます。詳細なオプションは [`skills/markdown-query/references/cli-reference.md`](skills/markdown-query/references/cli-reference.md) を参照してください。
-
-## Chunking Strategy と言語選択
-
-`mdq index` / `mdq search` には **言語** (`--lang`) と **Chunking Strategy** (`--strategy`) を指定できます。索引 DB は組み合わせごとに別ファイル (`.mdq/index-<lang>-<strategy>.sqlite`) として作成されるため、複数 Strategy を並行運用できます。
-
-### 言語 (`--lang`)
-
-| 値 | FTS5 tokenizer | 用途 |
-|---|---|---|
-| `ja-jp`（既定） | `trigram`（SQLite 3.34+。未対応環境では `unicode61` にフォールバック） | 日本語 |
-| `en-us` | `unicode61` | 英語 |
-
-### Chunking Strategy (`--strategy`)
-
-| 戦略 | 境界 | 既定パラメータ | overlap | 任意依存 |
-|---|---|---|---|---|
-| `heading`（既定 / legacy） | Markdown 見出しごとに 1 chunk | `--max-chunk-chars`（既定 0 = 無制限） | なし | なし |
-| `heading_recursive` | 見出し chunk が大きい場合に段落／行で再分割 | 2,000 字超で再分割 | 段落単位（既定 1 段落、`--overlap-paragraphs` で 0〜5） | なし |
-| `fixed_window` | 見出し構造を無視し、固定窓スライド | 1,000 字 / overlap 200 字 | 200 字 | なし |
-| `semantic_paragraph` | 見出しを hard boundary とし、文 embedding 類似度（Kamradt 二分探索）で意味境界決定 | min 200 / max 1,000 字、percentile 50〜99 | なし（意味境界自動） | `pip install -e .[semantic]`（fastembed + nltk + numpy）。既定モデル `intfloat/multilingual-e5-large`（初回 ~2GB DL） |
-| `pageindex` | 見出しベースのツリー索引。各ノードに `chunks.summary`（先頭抽出）を保存 | サマリ 200 字 / モード `head` | なし | なし（LLM 不要） |
-| `auto`（`search` 既定） | クエリ内容から自動選択（次節「クエリルーティング」参照） | — | — | — |
-
-主要オプション（`mdq index` / `mdq search` 共通）:
-
-| オプション | 説明 |
+| 操作 | コマンド |
 |---|---|
-| `--lang ja-jp|en-us` | 言語選択 |
-| `--strategy <name>` | Chunking Strategy（`search` では `auto` 既定） |
-| `--max-chunk-chars N` | `heading` / `semantic_paragraph` のチャンク最大文字数 |
-| `--overlap-paragraphs N` | `heading_recursive` の段落単位 overlap |
-| `--late-chunking` | `semantic_paragraph` 索引時に `chunk_embedding` (float32 BLOB) を保存 |
-| `--fusion-alpha α` | `search` で BM25 + embedding 類似度を線形加重統合（`--late-chunking` 索引が前提） |
-| `--include-parent` / `--with-parent-depth N` | ヒットチャンクの直近上位見出しチェーンを `expansion.parent` に含める |
-| `--pageindex-tree-depth N` | `pageindex` で `search` 時にルート→ヒットの summary 連鎖を `expansion.tree_path` に返す |
-| `--db <PATH>` | `--lang/--strategy` から導出される DB パスを明示上書き |
-
-CLI 例:
-
-```sh
-# 日本語・heading_recursive で索引（段落 overlap=2）
-python -m mdq index --lang ja-jp --strategy heading_recursive --overlap-paragraphs 2
-
-# semantic_paragraph で索引（late-chunking 有効化）
-pip install -e .[semantic]
-python -m mdq index --strategy semantic_paragraph --max-chunk-chars 1000 --late-chunking
-
-# 英語・auto 選択で検索
-python -m mdq search --lang en-us --q "design pattern overview" --with-parent-depth 2
-```
-
-## クエリルーティング（`--strategy auto`）
-
-`mdq search --strategy auto`（既定）は、`mdq/query_router.py` がクエリを以下 7 ルールで分類し、選定 Strategy の DB が存在しない場合は fallback chain に従って切り替えます。
-
-### ルール（上から評価、最初に該当したもの採用）
-
-| Rule | 条件 | 選択 Strategy | reason ID |
-|---|---|---|---|
-| R2′ | `--mode grep` | `heading` | `exact_match` |
-| R1 | ID 風（英数+ハイフンの単語） | `heading` | `id_lookup` |
-| R2 | 引用符付き完全一致 | `heading` | `exact_match` |
-| R6 | コード片（バッククォート / 記号密） | `fixed_window` | `code_fragment` |
-| R3 | 短い固有名詞（≤ 2 トークン） | `heading` | `short_proper_noun` |
-| R4 | 概念語（`概要` / `とは` / `what` 等） | `pageindex`（不在時はフォールバック） | `concept_overview` |
-| R5 | 物語的質問（`なぜ` / `どのように` / `?`） | `semantic_paragraph`（不在時 `heading_recursive`） | `narrative_query` |
-| R7 | 既定 | `heading_recursive` | `default` |
-
-### Fallback chain
-
-選定 Strategy の DB が `.mdq/index-*-*.sqlite` に存在しなければ、以下の順で利用可能な最初のものへ切り替わります（`fallback_used=True` が usage_log に記録されます）。
-
-`pageindex → semantic_paragraph → heading_recursive → heading → fixed_window`
-
-複数 Strategy を並行運用したい場合は、用途に応じた組み合わせで先に索引を作成しておくことを推奨します。
-
-## 索引データファイルと更新
-
-`.mdq/` 配下に永続化される主要ファイルと更新トリガは以下のとおりです。`.mdq/` は `.gitignore` 推奨です。
-
-| ファイル / テーブル | 役割 | 更新契機 | サイズ目安 |
-|---|---|---|---|
-| `.mdq/index-<lang>-<strategy>.sqlite` の `files` テーブル | ファイル単位の SHA-1 / mtime / size / frontmatter | `mdq index` / Watcher | 〜数 MB |
-| 同 `chunks` テーブル | 分割後のチャンク本文 + heading_path + part_index + parent_chunk_id (v4) | 同上 | 数十〜数百 MB |
-| 同 `chunks_fts`（FTS5 mirror） | 全文検索用トークン索引（v3 以降） | `chunks` への INSERT/DELETE と同一トランザクション | `chunks` の 0.5〜1.5 倍 |
-| 同 `chunks.text_raw` 列 (v5) | `semantic_paragraph` の contextualize ON 時に原文を保存 | `semantic_paragraph` 索引時のみ | `chunks.body` の 0.7 倍程度 |
-| 同 `chunks.chunk_embedding` 列 (v5) | float32 埋め込みベクトル | `semantic_paragraph` + `--late-chunking` 索引時のみ | チャンク数 × 4 KB |
-| 同 `chunks.summary` 列 (v6) | `pageindex` のノードサマリ | `pageindex` 索引時のみ | チャンク数 × 最大 2 KB |
-| `.mdq/usage.jsonl` | 全 mdq CLI 呼び出しの append-only ログ | 全サブコマンド完了時 | 1 行 ~500 B |
-
-運用 Tips:
-
-- **増分判定**: `mdq index` は `(stored_sha1 == current_sha1)` で skip するため、`git checkout` のように内容が同じで mtime だけ変わるケースでも余計な再索引は走りません。完全性が要件なら `--rebuild` を使用してください。
-- **Strategy 切り替え時**: 新 Strategy の索引は別 DB ファイルに生成されるため、既存 DB は触らず並行運用できます。
-- **DB 破損時**: `.mdq/index-<lang>-<strategy>.sqlite` を削除して `mdq index --strategy <name>` で再生成すれば復旧します。`.mdq/usage.jsonl` は索引と独立なので削除不要です。
-- **同一 (lang, strategy) の並行書き込み禁止**: SQLite ファイルロック (Windows) で失敗します。Watcher 実行中に手動 `mdq index` を流す場合は Watcher を停止してください。
-- **機微情報注意**: `.mdq/usage.jsonl` には検索クエリ `args.q` がそのまま記録されます。機密語句で検索した場合は内容を確認の上でリポジトリ外に出してください。
-
-## 評価方法（ベンチマーク）
-
-「本当に Context Window を節約できているか」を **自分のリポジトリで数値確認** するためのベンチマーク CLI を [`tools/markdown-query/benchmark.py`](tools/markdown-query/benchmark.py) として同梱しています。詳細は [`tools/markdown-query/README.md`](tools/markdown-query/README.md) を参照してください。
-
-### 何を測るのか
-
-同一クエリ集合に対し、次の 3 シナリオを比較します。
-
-| シナリオ | Context に投入する内容 | 想定する使い方 |
-| --- | --- | --- |
-| `baseline_full` | 索引対象配下の **全 Markdown 本文** | スキルを使わない場合の上限値 |
-| `mdq_bm25` | `mdq search --mode bm25` のヒットのみ | 既定の検索モード |
-| `mdq_grep` | `mdq search --mode grep` のヒットのみ | 厳密一致モード |
-
-各シナリオで **応答トークン数 / 検索 wall-clock / ベースライン比削減率 / coverage（任意）** を計測します。
-
-### 実行手順
-
-1. 索引を作成しておく（未作成なら `--ensure-index` を付ければ自動で作成されます）。
-
-   ```bash
-   mdq index
-   ```
-
-2. 計測したいクエリを 1 行 1 件で書いたファイルを用意します（例として [`tools/markdown-query/queries.sample.txt`](tools/markdown-query/queries.sample.txt) を同梱）。
-
-3. ベンチマークを実行します。
-
-   ```bash
-   python tools/markdown-query/benchmark.py \
-     --queries-file tools/markdown-query/queries.sample.txt \
-     --top-k 5 --max-tokens 800 --repeat 3 --ensure-index
-   ```
-
-4. 結果は `tools/markdown-query/results/bench-<UTCタイムスタンプ>.{json,md}` に出力されます（`results/` は `.gitignore` 済）。
-
-### 結果（Markdown レポート）の見方
-
-`bench-*.md` には次のセクションが順に並びます。
-
-1. **Environment**: トークナイザ（`tiktoken/cl100k_base` か fallback）、Python・OS・コミットハッシュ。**他環境の数値と絶対比較するときは必ずここを確認**。
-2. **Parameters**: `--top-k` `--max-tokens` `--repeat` などの実行条件。
-3. **Index summary**: `--ensure-index` 時の索引作成の所要時間。
-4. **baseline_full**: 全文投入時の `files / chars / tokens`。これが **削減率の分母**。
-5. **Skill なし vs Skill あり (プロンプトトークン比較)**: シナリオごとに次を表示します。
-   - `avg_response_tokens`: クエリ平均の応答トークン数（小さいほど Context 節約）。
-   - `avg_vs_baseline_savings_pct`: ベースライン比の削減率（例: `98.5%` なら全文投入比 1.5% に圧縮）。
-   - `latency_ms_all`: 全クエリ × `--repeat` 回の `mean / p50 / p95 / min / max`（同一マシン内の A/B 比較用）。
-   - `per_query[]`: クエリごとの hits 数、トークン、削減率、`coverage_proxy`（期待パス付き JSON 利用時のみ）。
-
-### 数値の解釈と注意点
-
-- **削減率が高い = 良い** とは限らない。`coverage_proxy`（期待パスが Hit に含まれた割合）が低ければ、絞り込みすぎている可能性があります。期待パス付きの `--queries-json` でセットで評価するのが推奨。
-- **`latency_ms` は絶対値で比較しない**。同一マシン・同一コミット内で `--mode bm25` vs `grep`、`--top-k` 違いなどを A/B するための指標です。
-- **このベンチマークは LLM API を呼ばない**。回答品質ではなく「Context 投入量と検索速度の代理指標」のみを測ります。回答品質まで含めた評価は別途必要です。
-- **撤去判断の閾値はツール側では提示しません**。「埋め込みベース RAG が導入されたら本スキルを退役させるか」などは、出力された数値を見て利用者が判断してください。
-
-### クエリに期待パスを紐付けて評価する（推奨）
-
-`coverage_proxy` を出すには、期待パス付きの JSON を渡します。
-
-```json
-[
-  {"q": "業務要件 概要", "expected_paths": ["sample/business-requirement.md"]},
-  {"q": "ユースケース", "expected_paths": ["sample/usecase-list.md"]}
-]
-```
-
-```bash
-python tools/markdown-query/benchmark.py \
-  --queries-json my-queries.json --repeat 3
-```
-
-### 実行例: `sample/` フォルダーに対するベンチマーク結果
-
-本リポジトリ同梱の [`sample/`](sample/) 配下（業務要件・ユースケース・サービス記述書の Markdown 4 ファイル）に対し、[`tools/markdown-query/queries.sample.txt`](tools/markdown-query/queries.sample.txt) の 5 クエリで実行した **参考値** です。生のレポートは [`tools/markdown-query/results/bench-20260514T012257Z.md`](tools/markdown-query/results/bench-20260514T012257Z.md) を参照してください。
-
-> **重要 — あくまで「例」です**: 以下の数値は **特定の環境・特定のリポジトリ・特定のクエリ集合** で測定したものであり、**ユーザーの環境で同じ結果や精度を保証するものではありません**。Markdown の量・章構造・クエリの語彙・トークナイザ・マシン性能などにより結果は大きく変動します。必ず自分のリポジトリで `benchmark.py` を実行して判断してください。
-
-**測定環境（例）**: `tiktoken/cl100k_base` / Python 3.12.10 / Windows 11 / `top_k=5`, `max_tokens=800`, `repeat=3`
-
-**baseline_full**: 4 files / 83,230 chars / **68,440 tokens**
-
-| シナリオ | avg tokens (with skill) | avg savings vs baseline | latency mean / p50 / p95 (ms) |
-| --- | ---: | ---: | --- |
-| `mdq_bm25` | 1,794.6 | **97.38%** | 13.35 / 13.65 / 14.20 |
-| `mdq_grep` | 700.6 | **98.98%** | 1.45 / 0.47 / 3.33 |
-
-クエリ別（`mdq_bm25`、抜粋）:
-
-| query | hits | tokens | savings % |
-| --- | ---: | ---: | ---: |
-| ロイヤルティプログラム | 5 | 2,484 | 96.37 |
-| 生成AI パーソナライズ | 5 | 1,816 | 97.35 |
-| ポイント付与 失効 | 5 | 1,250 | 98.17 |
-| 会員 同意管理 | 5 | 1,402 | 97.95 |
-| ユースケース | 5 | 2,021 | 97.05 |
-
-> この例では全文投入の **約 1〜3%** までプロンプトトークンが圧縮されています。一方で `mdq_grep` は語の表記揺れに弱く、`生成AI パーソナライズ` など 0 hit になるクエリもあります（`savings % = 100` は「ヒットなし」を意味するため、別途 `coverage_proxy` での確認が必要です）。**削減率だけで判断せず、必ず期待パス付き JSON で coverage も併せて評価してください**。
-
-## 利用統計レポート（任意）
-
-`mdq` の全 CLI 呼び出しは `.mdq/usage.jsonl` に append-only で記録されます。これを集計して、Skill が実際に呼ばれているか・Context 削減が効いているかを定量化できます。
-
-- 集計モジュール: [`mdq/usage_stats.py`](mdq/usage_stats.py)
-- レポート生成スクリプト: [`tools/markdown-query/generate_usage_report.py`](tools/markdown-query/generate_usage_report.py)
-- 出力先: `tools/markdown-query/usage-report/YYYY-MM-DD.{json,md}` および `latest.{json,md}`
-- 保持期間: 既定 90 日（`--retention-days N` で変更、`0` で無効化）。`latest.*` は常に保持されます。
-
-`usage.jsonl` の各行は次のスキーマで、検索ごとに 1 行ずつ追記されます:
-
-```json
-{
-  "ts": "2026-05-21T12:34:56.789Z",
-  "command": "search",
-  "args": {"q": "…", "mode": "bm25", "strategy": "auto",
-            "effective_strategy": "heading_recursive",
-            "router_reason": "default", "router_rule_id": 7,
-            "router_fallback_used": false},
-  "elapsed_ms": 42,
-  "result": {"hit_count": 8, "snippet_chars": 1234, "source_file_chars": 56789,
-              "score_top": 12.3, "score_2nd": 9.8, "parent_expanded": 2},
-  "exit_code": 0,
-  "context": {"repo_root": "/abs/path"}
-}
-```
-
-### 主要指標（抜粋）
-
-レポートは「インデックスの統計情報」と「Skill 利用統計情報」の 2 セクションで構成され、後者は直近 7 日間を既定ウィンドウとして以下のような指標を算出します。
-
-| グループ | 指標 | 何を見るか |
-|---|---|---|
-| 基盤・索引 | E1 索引サイズ / E2 索引鮮度 / E5 孤児チャンク削除累計 / F2 索引差分更新比率 | 索引が新しいか、増分更新が効いているか |
-| 呼び出し量 | A1 サブコマンド別呼び出し回数 / A4 Skill ルーティング記載有無 / D1 DO NOT USE FOR 違反 | Skill が実際に呼ばれているか、棲み分けが守られているか |
-| Context 削減 | B1 Context 削減率 / B2 引数平均（top_k / max_tokens / snippet_radius） / B3 get/search 比率 | Skill の中核目的（Context 節約）が効いているか |
-| 結果品質 | C1 ヒット 0 件率 / C2 上位 2 件 score 差 / C3 expansion フラグ使用率 | 検索がクエリに合っているか、チャンク粒度が適切か |
-| パフォーマンス | F1 search 実行時間 p50/p95 | Skill の応答性能 |
-| ルーティング (v2.0) | H1 auto_strategy 分布 / H2 parent 展開率 | `--strategy auto` で何が選ばれているか、parent 展開が効いているか |
-
-> 注: 一部の指標（例: `A2 Step あたり呼び出し回数`、`G1 mdq 利用 Step 完了率差`、`G4 Step 再実行回数差`、`D3 典型クエリ出現率`）は上位オーケストレーター（HVE 等）が `HVE_STEP_ID` / `context.run_id` などを usage_log に注入する前提で動作するため、本プラグイン単体では未利用となります。詳細は [`mdq/usage_stats.py`](mdq/usage_stats.py) のドキュメンテーション参照。
-
-## 他リポジトリへの移植チェックリスト
-
-`markdown-query` Skill を別リポジトリへ持ち込む際に **「エージェントが実際に呼んでくれる状態」** へ仕上げるための導入チェックリストです。配置だけでは採用率が伸びないことが多く、以下 5 項目を併せて整備することを推奨します。
-
-### 1. Windows 文字コード起因の exit 1 を解消する
-
-[`mdq/cli.py`](mdq/cli.py) の `main()` は標準出力を再構成しないため、Windows の cp932 ロケールでヒットに絵文字が含まれると `UnicodeEncodeError` で **exit code 1** を返すことがあります。エージェントは「壊れている」と判断してツールを回避するため、最初に解消してください。
-
-- 恒久対策: `main()` の冒頭で `sys.stdout.reconfigure(encoding='utf-8', errors='replace')` を呼ぶ。
-- 暫定回避: 環境変数 `PYTHONIOENCODING=utf-8` を設定する。
-
-### 2. 最上位ルールに Markdown 検索の優先順位を明記する
-
-リポジトリ最上位のエージェント共通ルール文書（`.github/copilot-instructions.md` / `CLAUDE.md` / `AGENTS.md` 等）に、優先順位を明記してください。
-
-```markdown
-- Markdown ファイル群を対象とした検索・横断クエリは、まず `markdown-query` Skill
-  （`python -m mdq search ...`）を試す。0 ヒットまたは目的が一致しない場合に限り
-  `grep_search` / `read_file` へフォールバックする。
-- ソースコード（`.py`, `.ts` 等）の検索や、Markdown 編集／生成は本 Skill の対象外。
-```
-
-### 3. SKILL.md `description` に `grep_search` も `PREFER OVER` に含める
-
-[`skills/markdown-query/SKILL.md`](skills/markdown-query/SKILL.md) の frontmatter で `read_file` / `cat` だけでなく `grep_search` も明示すると、上位指示で `grep_search` を「標準」とするエージェントホストでも選ばれやすくなります。
-
-### 4. Skill ルーティング表で `.md` 限定優先を明示する
-
-ルーティング相当文書がある場合は `grep_search` 行から `markdown-query` への誘導文言を追加してください。
-
-### 5. 初回索引の自動化（採用障壁の除去）
-
-索引が無い状態で `mdq search` を呼ぶと 0 件返却となり、エージェントが諦める誘因になります。以下のいずれかで初回索引を自動化してください。
-
-- CI / pre-commit / devcontainer 起動スクリプトに `python -m mdq index` を組み込む
-- エージェント onboarding ステップで `mdq stats` → 0 件なら自動 `index` を実行（[`skills/markdown-query/SKILL.md`](skills/markdown-query/SKILL.md) §手順サマリに該当記載あり）
-- リポジトリルートに `mdq.toml` を作成し `[index].roots` にドキュメントディレクトリを列挙（推奨）。[`mdq/cli.py`](mdq/cli.py) の `DEFAULT_ROOTS` は設定ファイル不在時の最小フォールバックです
-
-### 採用率の検証
-
-導入後 1〜2 週間運用してから [`tools/markdown-query/generate_usage_report.py`](tools/markdown-query/generate_usage_report.py) を実行し、**A1 `search` 件数** がタスク数に対して妥当か確認してください。極端に少ない場合は上記 1〜5 の未実施項目を再点検します。自リポジトリでの実測トークン削減率は `python tools/markdown-query/benchmark.py` で取得し、**Skill 改善前後の 2 回比較で相対変化を見る** ことを推奨します。
-
-## リポジトリ構成
-
-```
-README.md                           本ファイル
-LICENSE                             MIT ライセンス
-plugin.json                         プラグイン定義（Copilot CLI / 共通）
-apm.yml                             APM マーケットプレイス定義（authoring）
-.claude-plugin/marketplace.json     Claude Code / Copilot CLI 用マーケットプレイス
-.claude-plugin/plugin.json          Claude Code 用プラグイン定義
-gemini-extension.json               Gemini CLI 拡張定義
-.mcp.json                           MCP サーバー設定（現状は空、必要に応じて拡張）
-setup/                              スキル別の追加 CLI インストールスクリプト
-  setup-markdown-query.ps1
-  setup-markdown-query.sh
-skills/                             スキル本体
-  markdown-query/
-    SKILL.md
-    examples/
-    references/
-```
-
-> **注意**: `plugin.json`（ルート）と `.claude-plugin/plugin.json` は内容を重複させています。片方を更新する際はもう片方も同期してください。`apm.yml` と `.claude-plugin/marketplace.json` も同様です。
+| キットのファイルを変更した後 | `python scripts/refresh-kit-manifest.py markdown-query code-query tool-search` |
+| `<kit>/skill/` または `plugin.json` を変更した後 | `python scripts/sync-plugin-assets.py` |
+| 生成物が最新かの確認（CI と同じ） | `python scripts/refresh-kit-manifest.py --check markdown-query code-query tool-search`<br>`python scripts/sync-plugin-assets.py --check` |
+
+- `install.ps1` / `install.py` / `install.sh` / `kit/` は 3 キットでバイト同一に保ってください。1 つを編集したら残り 2 つへコピーします。
+- キットのファイルを変更したら必ず `KIT-VERSION.json` を再生成してください。しないと `install.py --verify` が「改変」を報告します。
+- 各キットは上流リポジトリ（`dahatake/RoyalytyService2ndGen`）からコピーしたものです。本リポジトリで加えた差分は `KIT-VERSION.json` の `local_patches` に記録しています。
+- `.gitattributes` は、シェルスクリプトを LF に固定し、ハッシュ検証対象のキットを改行変換の対象外にしています。変更する際はこの 2 点を壊さないでください。
 
 ## ライセンス
 
 [MIT](LICENSE)
-

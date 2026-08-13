@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 700" role="img"
+     aria-labelledby="t d" font-family="Segoe UI, Hiragino Sans, Meiryo, sans-serif">
+  <title id="t">Watcher シーケンス: ファイル変更 → debounce → 増分索引</title>
+  <desc id="d">watchdog によるファイルイベント検出から debounce、バースト fallback、index_one_file/delete_one_file までのフロー。</desc>
+
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1A1A1A"/>
+    </marker>
+    <marker id="arD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6B2C91"/>
+    </marker>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#525252"/>
+    </marker>
+    <style><![CDATA[
+      .ttl { font-size: 19px; font-weight: 700; fill: #1A1A1A; }
+      .meta { font-size: 11px; fill: #555; }
+      .actor { font-size: 13px; font-weight: 700; fill: white; }
+      .lbl { font-size: 12px; fill: #1A1A1A; }
+      .sm  { font-size: 11px; fill: #1A1A1A; }
+      .life { stroke: #888; stroke-dasharray: 4 3; stroke-width: 1; }
+      .actor-os   { fill: #444; }
+      .actor-wd   { fill: #6B2C91; }
+      .actor-mw   { fill: #6B2C91; }
+      .actor-idx  { fill: #006B3C; }
+      .actor-stor { fill: #525252; }
+      .msg  { stroke: #1A1A1A; stroke-width: 1.4; fill: none; }
+      .msgD { stroke: #6B2C91; stroke-width: 1.4; fill: none; stroke-dasharray: 5 3; }
+      .msgR { stroke: #525252; stroke-width: 1.4; fill: none; stroke-dasharray: 2 3; }
+      .note-box { fill: #F1EBF5; stroke: #6B2C91; stroke-width: 1; }
+      .frame { fill: none; stroke: #525252; stroke-width: 1; stroke-dasharray: 6 3; }
+    ]]></style>
+  </defs>
+
+  <text x="20" y="28" class="ttl">シーケンス 3 — Watcher  `python -m mdq watch` (または HVE CLI Orchestrator 内蔵起動)</text>
+  <text x="20" y="46" class="meta">SoT: mdq/watcher.py:MdqWatcher (debounce 500ms, burst threshold 100/1s, daemon thread)  ·  Cloud Agent では未使用</text>
+
+  <g>
+    <rect x="60"   y="65" width="130" height="32" class="actor-os"/>
+    <text x="125"  y="86" text-anchor="middle" class="actor">OS / Editor</text>
+    <rect x="230"  y="65" width="140" height="32" class="actor-wd"/>
+    <text x="300"  y="86" text-anchor="middle" class="actor">watchdog Observer</text>
+    <rect x="420"  y="65" width="170" height="32" class="actor-mw"/>
+    <text x="505"  y="86" text-anchor="middle" class="actor">MdqWatcher (worker)</text>
+    <rect x="640"  y="65" width="180" height="32" class="actor-idx"/>
+    <text x="730"  y="86" text-anchor="middle" class="actor">indexer.index_one_file</text>
+    <rect x="870"  y="65" width="200" height="32" class="actor-stor"/>
+    <text x="970"  y="86" text-anchor="middle" class="actor">store.py / SQLite (worker 接続)</text>
+
+    <line x1="125" y1="97" x2="125" y2="670" class="life"/>
+    <line x1="300" y1="97" x2="300" y2="670" class="life"/>
+    <line x1="505" y1="97" x2="505" y2="670" class="life"/>
+    <line x1="730" y1="97" x2="730" y2="670" class="life"/>
+    <line x1="970" y1="97" x2="970" y2="670" class="life"/>
+  </g>
+
+  <!-- start -->
+  <path d="M125,120 L296,120" class="msgD" marker-end="url(#arD)"/>
+  <text x="130" y="115" class="sm">⓪ start(): Observer.schedule(roots, recursive=True) → daemon thread 開始</text>
+
+  <!-- file modified -->
+  <path d="M125,155 L296,155" class="msg" marker-end="url(#ar)"/>
+  <text x="130" y="150" class="sm">① docs/foo.md を保存 → FileModifiedEvent / FileCreatedEvent / FileDeletedEvent</text>
+
+  <!-- enqueue -->
+  <path d="M300,185 L501,185" class="msg" marker-end="url(#ar)"/>
+  <text x="305" y="180" class="sm">② on_any_event → _enqueue(rel_path, action) — `.md` 以外は無視、`.mdq/` 配下も無視</text>
+
+  <!-- pending lock -->
+  <rect x="395" y="200" width="500" height="65" class="frame"/>
+  <text x="405" y="218" class="lbl" font-weight="700" fill="#525252">_enqueue() / _note_event() 内部 (pending_lock + burst_lock)</text>
+  <text x="405" y="236" class="sm">pending[rel] = (action, monotonic())  /  recent_events に ts 追加 → window=1s でフィルタ</text>
+  <text x="405" y="252" class="sm">|recent_events| ≥ burst_threshold(=100) → fallback_pending = True</text>
+
+  <!-- worker tick -->
+  <path d="M505,290 L505,300" class="msgD"/>
+  <text x="513" y="296" class="sm">③ worker_loop: 500 ms (debounce_ms) ごとに wake</text>
+
+  <!-- flush_once decision -->
+  <rect x="395" y="310" width="500" height="60" class="note-box"/>
+  <text x="405" y="328" class="lbl" font-weight="700" fill="#6B2C91">_flush_once(final=False)</text>
+  <text x="405" y="346" class="sm">burst フラグ立っていれば → _fallback_reindex() (全 root を build_index で再走査)</text>
+  <text x="405" y="362" class="sm">通常時は (now - enqueue_ts) ≥ debounce のものだけ ready dict に抽出</text>
+
+  <!-- per file -->
+  <rect x="395" y="385" width="650" height="200" class="frame"/>
+  <text x="405" y="403" class="lbl" font-weight="700" fill="#525252">loop: for rel, action in ready.items()</text>
+
+  <!-- modify path -->
+  <path d="M505,425 L726,425" class="msg" marker-end="url(#ar)"/>
+  <text x="513" y="420" class="sm">④a action ∈ {"create","modify"} → index_one_file(repo_root, abs_path, conn, strategy)</text>
+
+  <path d="M730,450 L966,450" class="msg" marker-end="url(#ar)"/>
+  <text x="738" y="445" class="sm">⑤ SHA1 比較 → 変化あれば DELETE 旧 chunks + INSERT 新 chunks (+chunks_fts mirror)</text>
+
+  <!-- missing race -->
+  <path d="M730,478 L505,478" class="msgR" marker-end="url(#arR)"/>
+  <text x="513" y="473" class="sm">⑥ action="missing" (create→delete 競合) → delete_one_file で掃除</text>
+
+  <!-- delete path -->
+  <path d="M505,510 L966,510" class="msg" marker-end="url(#ar)"/>
+  <text x="513" y="505" class="sm">④b action="delete" → delete_one_file(rel, conn) → ON DELETE CASCADE で chunks も削除</text>
+
+  <!-- commit -->
+  <path d="M505,550 L966,550" class="msg" marker-end="url(#ar)"/>
+  <text x="513" y="545" class="sm">⑦ conn.commit()  →  logger.info("flush indexed=N deleted=M")</text>
+
+  <!-- shutdown -->
+  <path d="M125,615 L296,615" class="msgD" marker-end="url(#arD)"/>
+  <text x="130" y="610" class="sm">⑧ Ctrl+C / Orchestrator 終了 → stop(): Observer.stop() + _flush_once(final=True) で残処理</text>
+
+  <text x="20" y="678" class="meta">補足: HVE Cloud Agent (GitHub Issue 起点) では Watcher は起動しない。手動 index または GUI 索引化が必要。</text>
+</svg>

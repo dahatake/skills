@@ -1,0 +1,132 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  linux:
+    # Runs on Linux on purpose: it is the checkout whose end-of-line rules differ
+    # from the Windows machine that produces KIT-VERSION.json.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Kit payloads match KIT-VERSION.json
+        run: |
+          set -e
+          for kit in markdown-query code-query tool-search; do
+            echo "== $kit"
+            python "$kit/install.py" --kit-dir "$kit" --verify
+          done
+
+      - name: KIT-VERSION.json is regenerated from the shipped files
+        run: python scripts/refresh-kit-manifest.py --check markdown-query code-query tool-search
+
+      - name: Generated plugin assets are in sync
+        run: python scripts/sync-plugin-assets.py --check
+
+      - name: Shell entry points are LF and executable
+        run: |
+          set -e
+          status=0
+          for f in $(git ls-files '*.sh'); do
+            if grep -q $'\r' "$f"; then echo "CRLF: $f"; status=1; fi
+            if [ ! -x "$f" ]; then echo "not executable: $f"; status=1; fi
+          done
+          exit $status
+
+      - name: Smoke test each kit against a scratch repository
+        run: |
+          set -e
+          demo="$RUNNER_TEMP/demo"
+          mkdir -p "$demo/docs" "$demo/src" "$demo/tools/kits"
+          printf '# Deploy\n\n## Prerequisites\n\nPython 3.11+.\n' > "$demo/docs/deploy.md"
+          # Real content next to the kits, so `tools` becomes a proposed root and
+          # the generated exclude block is actually exercised.
+          printf '# Runbook\n\n## Recovery\n\nSteps.\n' > "$demo/tools/overview.md"
+          printf 'def resolve_run_id(name):\n    """    """\n    return name.upper()\n' > "$demo/src/app.py"
+          git -C "$demo" init -q
+          git -C "$demo" add -A
+          git -C "$demo" -c user.email=ci@example.com -c user.name=ci commit -qm init
+          for kit in markdown-query code-query tool-search; do
+            cp -r "$kit" "$demo/tools/kits/$kit"
+            bash "$demo/tools/kits/$kit/install.sh" --skip-prereq --repo-root "$demo"
+          done
+          cd "$demo"
+          bash tools/kits/tool-search/toolsearch.sh policy
+
+      - name: Both indexes hold the repository, not the kits
+        run: |
+          set -e
+          cd "$RUNNER_TEMP/demo"
+          count() { "$@" | python -c 'import json,sys; print(json.load(sys.stdin)["files"])'; }
+          files=$(count bash tools/kits/markdown-query/mdq.sh stats)
+          echo "mdq files=$files"; [ "$files" -gt 0 ]
+          files=$(count bash tools/kits/code-query/cq.sh stats)
+          echo "cq files=$files"; [ "$files" -gt 0 ]
+          # `tools` is a root here, so the kits are only kept out by the generated
+          # [index].exclude block. Without it this grep finds ~100 kit files.
+          grep -q 'tools/kits/' mdq.toml
+          if bash tools/kits/markdown-query/mdq.sh list | grep -q 'tools/kits/'; then
+            echo 'markdown-query indexed the kits'; exit 1
+          fi
+          bash tools/kits/markdown-query/mdq.sh list | grep -q 'tools/overview.md'
+          bash tools/kits/code-query/cq.sh search --q resolve_run_id | grep -q 'src/app.py'
+
+  windows:
+    # The PowerShell entry points and the console-encoding handling only exist here.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install every kit into a scratch repository
+        shell: pwsh
+        run: |
+          $demo = Join-Path $env:RUNNER_TEMP 'demo'
+          New-Item -ItemType Directory -Force -Path "$demo/docs", "$demo/src", "$demo/tools/kits" | Out-Null
+          Set-Content "$demo/docs/deploy.md" "# Deploy`n`n## Prerequisites`n`nPython 3.11+.`n"
+          Set-Content "$demo/tools/overview.md" "# Runbook`n`n## Recovery`n`nSteps.`n"
+          Set-Content "$demo/src/app.py" "def resolve_run_id(name):`n    return name.upper()`n"
+          git -C $demo init -q
+          git -C $demo add -A
+          git -C $demo -c user.email=ci@example.com -c user.name=ci commit -qm init
+          foreach ($kit in 'markdown-query', 'code-query', 'tool-search') {
+            Copy-Item -Recurse -Force $kit "$demo/tools/kits/$kit"
+            & "$demo/tools/kits/$kit/install.ps1" -SkipPrereq -RepoRoot $demo
+            if ($LASTEXITCODE -ne 0) { throw "$kit install failed with $LASTEXITCODE" }
+          }
+
+      - name: Wrappers work and leave the session untouched
+        shell: pwsh
+        run: |
+          $demo = Join-Path $env:RUNNER_TEMP 'demo'
+          $env:PYTHONPATH = 'sentinel'
+          Push-Location $demo
+          & "$demo/tools/kits/markdown-query/mdq.ps1" stats
+          if ($LASTEXITCODE -ne 0) { throw 'mdq.ps1 stats failed' }
+          & "$demo/tools/kits/code-query/cq.ps1" stats | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'cq.ps1 stats failed' }
+          & "$demo/tools/kits/tool-search/toolsearch.ps1" policy | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'toolsearch.ps1 policy failed' }
+          Pop-Location
+          if ($env:PYTHONPATH -ne 'sentinel') { throw "PYTHONPATH leaked: $env:PYTHONPATH" }
+
+      - name: Kit-root scripts are importable
+        shell: pwsh
+        run: |
+          python markdown-query/benchmark.py --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'benchmark.py --help failed' }
+          python markdown-query/eval_semantic.py --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'eval_semantic.py --help failed' }
+          python markdown-query/generate_usage_report.py --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'generate_usage_report.py --help failed' }

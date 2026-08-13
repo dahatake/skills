@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 740" role="img"
+     aria-labelledby="t d" font-family="Segoe UI, Hiragino Sans, Meiryo, sans-serif">
+  <title id="t">検索シーケンス: python -m mdq search --strategy auto</title>
+  <desc id="d">query_router による strategy 自動選定、fallback chain、BM25 検索、snippet 生成、parent expansion、usage_log 書き込みまでのフロー。</desc>
+
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1A1A1A"/>
+    </marker>
+    <marker id="arD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6B2C91"/>
+    </marker>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#525252"/>
+    </marker>
+    <style><![CDATA[
+      .ttl { font-size: 19px; font-weight: 700; fill: #1A1A1A; }
+      .meta { font-size: 11px; fill: #555; }
+      .actor { font-size: 13px; font-weight: 700; fill: white; }
+      .lbl { font-size: 12px; fill: #1A1A1A; }
+      .sm  { font-size: 11px; fill: #1A1A1A; }
+      .life { stroke: #888; stroke-dasharray: 4 3; stroke-width: 1; }
+      .actor-cli  { fill: #0066CC; }
+      .actor-rt   { fill: #B85C00; }
+      .actor-srch { fill: #B85C00; }
+      .actor-stor { fill: #525252; }
+      .actor-log  { fill: #444; }
+      .msg  { stroke: #1A1A1A; stroke-width: 1.4; fill: none; }
+      .msgD { stroke: #6B2C91; stroke-width: 1.4; fill: none; stroke-dasharray: 5 3; }
+      .msgR { stroke: #525252; stroke-width: 1.4; fill: none; stroke-dasharray: 2 3; }
+      .note-box { fill: #FFFBE6; stroke: #B85C00; stroke-width: 1; }
+      .frame { fill: none; stroke: #525252; stroke-width: 1; stroke-dasharray: 6 3; }
+    ]]></style>
+  </defs>
+
+  <text x="20" y="28" class="ttl">シーケンス 2 — 検索  `python -m mdq search "Q" --strategy auto`</text>
+  <text x="20" y="46" class="meta">SoT: mdq/cli.py:cmd_search → mdq/query_router.py → mdq/search.py → mdq/store.py → mdq/usage_log.py</text>
+
+  <g>
+    <rect x="60"   y="65" width="120" height="32" class="actor-cli"/>
+    <text x="120"  y="86" text-anchor="middle" class="actor">User / Agent</text>
+    <rect x="230"  y="65" width="120" height="32" class="actor-cli"/>
+    <text x="290"  y="86" text-anchor="middle" class="actor">cli.py</text>
+    <rect x="400"  y="65" width="160" height="32" class="actor-rt"/>
+    <text x="480"  y="86" text-anchor="middle" class="actor">query_router.py</text>
+    <rect x="610"  y="65" width="140" height="32" class="actor-srch"/>
+    <text x="680"  y="86" text-anchor="middle" class="actor">search.py</text>
+    <rect x="800"  y="65" width="120" height="32" class="actor-stor"/>
+    <text x="860"  y="86" text-anchor="middle" class="actor">store.py / SQLite</text>
+    <rect x="950"  y="65" width="130" height="32" class="actor-log"/>
+    <text x="1015" y="86" text-anchor="middle" class="actor">usage_log.py</text>
+
+    <line x1="120"  y1="97" x2="120"  y2="700" class="life"/>
+    <line x1="290"  y1="97" x2="290"  y2="700" class="life"/>
+    <line x1="480"  y1="97" x2="480"  y2="700" class="life"/>
+    <line x1="680"  y1="97" x2="680"  y2="700" class="life"/>
+    <line x1="860"  y1="97" x2="860"  y2="700" class="life"/>
+    <line x1="1015" y1="97" x2="1015" y2="700" class="life"/>
+  </g>
+
+  <!-- 1 -->
+  <path d="M120,120 L286,120" class="msg" marker-end="url(#ar)"/>
+  <text x="125" y="115" class="sm">① mdq search "Q" --strategy auto --mode bm25 --top-k 8 --paths …</text>
+
+  <!-- 2 router discover -->
+  <path d="M290,155 L476,155" class="msg" marker-end="url(#ar)"/>
+  <text x="295" y="150" class="sm">② discover_available_strategies(repo_root) — `.mdq/index-*-*.sqlite` を走査</text>
+  <path d="M476,175 L294,175" class="msgR" marker-end="url(#arR)"/>
+  <text x="295" y="170" class="sm">③ available: {"heading", "heading_recursive", …}</text>
+
+  <!-- 3 classify -->
+  <path d="M290,205 L476,205" class="msg" marker-end="url(#ar)"/>
+  <text x="295" y="200" class="sm">④ classify_query(q, available, mode)</text>
+
+  <!-- rules box -->
+  <rect x="395" y="220" width="600" height="135" class="note-box"/>
+  <text x="405" y="237" class="lbl" font-weight="700" fill="#B85C00">7 ルール (上から順に評価、最初に該当したものを採用)</text>
+  <text x="405" y="254" class="sm">R2′ grep モード → heading (exact)   /   R1 ID 風 (英数+ハイフン) → heading</text>
+  <text x="405" y="270" class="sm">R2  引用符付き → heading (exact)   /   R6 コード片 (バッククォート/記号密) → fixed_window</text>
+  <text x="405" y="286" class="sm">R3  短い固有名詞 (≤2 トークン) → heading</text>
+  <text x="405" y="302" class="sm">R4  概念語 (概要/とは/whatなど) → heading</text>
+  <text x="405" y="318" class="sm">R5  物語的質問 (なぜ/どのように/疑問符) → semantic_paragraph → 不在なら heading_recursive へ fallback</text>
+  <text x="405" y="334" class="sm">R7  既定 → heading_recursive  ／  選定 strategy が未索引なら fallback chain</text>
+  <text x="405" y="350" class="sm" font-style="italic">fallback 順: semantic_paragraph → heading_recursive → heading → fixed_window</text>
+
+  <path d="M476,375 L294,375" class="msgR" marker-end="url(#arR)"/>
+  <text x="295" y="370" class="sm">⑤ RouterDecision(strategy, reason, rule_id, fallback_used, candidates)</text>
+
+  <!-- store open -->
+  <path d="M290,405 L856,405" class="msg" marker-end="url(#ar)"/>
+  <text x="295" y="400" class="sm">⑥ store.open_store(db_path_for(lang, effective_strategy))</text>
+
+  <!-- search call -->
+  <path d="M290,440 L676,440" class="msg" marker-end="url(#ar)"/>
+  <text x="295" y="435" class="sm">⑦ searcher.search(conn, q, mode, top_k, max_tokens, path_globs, tags, snippet_radius, parent_depth, expand_neighbors, engine, fusion_alpha)</text>
+
+  <!-- search → store query -->
+  <path d="M680,470 L856,470" class="msg" marker-end="url(#ar)"/>
+  <text x="688" y="465" class="sm">⑧ SELECT (FTS5 MATCH ‖ LIKE) + 候補集合取得</text>
+  <path d="M856,490 L684,490" class="msgR" marker-end="url(#arR)"/>
+  <text x="688" y="485" class="sm">⑨ candidate chunks</text>
+
+  <!-- BM25 scoring -->
+  <rect x="595" y="500" width="380" height="50" rx="4" class="note-box"/>
+  <text x="605" y="517" class="lbl" font-weight="700" fill="#B85C00">scoring</text>
+  <text x="605" y="533" class="sm">rank_bm25 があれば使用、無ければ _MiniBM25 (k1=1.5, b=0.75)。late fusion 時は fusion_alpha 適用。</text>
+
+  <!-- snippet -->
+  <path d="M680,565 L680,575" class="msg"/>
+  <text x="688" y="571" class="sm">⑩ _make_snippet(radius=±2 行, max=400 字)</text>
+
+  <!-- parent expansion optional -->
+  <path d="M680,595 L856,595" class="msgD" marker-end="url(#arD)"/>
+  <text x="688" y="590" class="sm">⑪ opt: parent_chunk_id を再帰取得 (--with-parent-depth N)</text>
+
+  <!-- return -->
+  <path d="M676,625 L294,625" class="msgR" marker-end="url(#arR)"/>
+  <text x="295" y="620" class="sm">⑫ list[Hit] (chunk_id, path, heading_path, lines, score, snippet, expansion)</text>
+
+  <!-- log -->
+  <path d="M290,655 L1011,655" class="msgD" marker-end="url(#arD)"/>
+  <text x="295" y="650" class="sm">⑬ usage_log.append_record(command="search", router_reason, router_rule_id, fallback_used, snippet_chars, source_file_chars, …)</text>
+
+  <!-- print -->
+  <path d="M286,685 L124,685" class="msgR" marker-end="url(#arR)"/>
+  <text x="130" y="680" class="sm">⑭ print JSON Lines (--format json) / compact (--format compact)</text>
+
+  <text x="20" y="725" class="meta">注: max_tokens 上限で打ち切り → C3 (Context 削減率) 指標は usage_log の snippet_chars/source_file_chars 比で算出。</text>
+</svg>

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "markdown-query-gui"
+version = "0.2.0"
+description = "Standalone GUI for the markdown-query Skill (PySide6)"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  # Index/search/CLI engine. Bundled under ./vendor/mdq when this directory
+  # is copied into another repository; install scripts prepend ./vendor to
+  # sys.path. Direct PyPI install is also fine when available.
+  "rank_bm25>=0.2.2",
+  "tiktoken>=0.7.0",
+  "PySide6>=6.6",
+]
+
+[project.optional-dependencies]
+# Realtime index update via OS file events.
+watch = ["watchdog>=4.0"]
+
+[project.scripts]
+# Console script entry. When installed via ``pip install .`` from this
+# directory, the vendored ``mdq`` package (engine + GUI) is what gets
+# installed, per the ``[tool.setuptools.packages.find]`` configuration below.
+markdown-query-gui = "mdq.gui.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["vendor"]
+include = ["mdq*"]

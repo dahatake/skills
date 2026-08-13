@@ -1,11 +1,21 @@
 # Python virtual environments
 .venv/
+.venv-*/
 __pycache__/
 *.pyc
 .pytest_cache
-.venv-release
-.venv-verify
+.mypy_cache/
 
-# markdown-query index & benchmark artifacts
+# Local index / telemetry each kit creates inside the target repository
 .mdq/
-tools/markdown-query/results/
+.cq/
+.toolsearch/
+
+# Benchmark output
+markdown-query/results/
+code-query/results/
+
+# Python build artifacts
+*.egg-info/
+build/
+dist/

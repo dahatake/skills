@@ -1,0 +1,18 @@
+# Distribution kit manifest for the `code-query` Skill.
+#
+# The setup and sync logic itself lives in the bundled `kit/` directory;
+# this file carries only the values that differ between kits.
+
+[kit]
+engine = "cq"
+skill = "code-query"
+venv = ".venv-cq"
+config = "cq.toml"
+init_config = "init_config.py"
+config_supports_profile = true
+default_profile = "main"
+
+base_dependencies = []
+gui_dependencies = ["PySide6>=6.6"]
+watch_dependencies = ["watchdog>=4.0"]
+tokenizer_dependencies = ["tiktoken>=0.7.0"]

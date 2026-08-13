@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 760" role="img"
+     aria-labelledby="t d" font-family="Segoe UI, Hiragino Sans, Meiryo, sans-serif">
+  <title id="t">索引化シーケンス: python -m mdq index</title>
+  <desc id="d">cmd_index 呼び出しから build_index、index_one_file、strategies 分岐、store 永続化、usage_log 出力までのメッセージフロー。</desc>
+
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1A1A1A"/>
+    </marker>
+    <marker id="arD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6B2C91"/>
+    </marker>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#525252"/>
+    </marker>
+    <style><![CDATA[
+      .ttl { font-size: 19px; font-weight: 700; fill: #1A1A1A; }
+      .meta { font-size: 11px; fill: #555; }
+      .actor { font-size: 13px; font-weight: 700; fill: white; }
+      .lbl { font-size: 12px; fill: #1A1A1A; }
+      .sm  { font-size: 11px; fill: #1A1A1A; }
+      .note { font-size: 11px; fill: #1A1A1A; }
+      .life { stroke: #888; stroke-dasharray: 4 3; stroke-width: 1; }
+      .actor-cli  { fill: #0066CC; }
+      .actor-idx  { fill: #006B3C; }
+      .actor-strg { fill: #B85C00; }
+      .actor-stor { fill: #525252; }
+      .actor-log  { fill: #444; }
+      .msg { stroke: #1A1A1A; stroke-width: 1.4; fill: none; }
+      .msgD { stroke: #6B2C91; stroke-width: 1.4; fill: none; stroke-dasharray: 5 3; }
+      .msgR { stroke: #525252; stroke-width: 1.4; fill: none; stroke-dasharray: 2 3; }
+      .note-box { fill: #FFFBE6; stroke: #B85C00; stroke-width: 1; }
+      .frame { fill: none; stroke: #525252; stroke-width: 1; stroke-dasharray: 6 3; }
+    ]]></style>
+  </defs>
+
+  <text x="20" y="28" class="ttl">シーケンス 1 — 索引化  `python -m mdq index --strategy heading_recursive`</text>
+  <text x="20" y="46" class="meta">SoT: mdq/cli.py:cmd_index → mdq/indexer.py:build_index/index_one_file → mdq/store.py → mdq/usage_log.py</text>
+
+  <!-- Actor lanes -->
+  <g>
+    <rect x="60"   y="65" width="120" height="32" class="actor-cli"/>
+    <text x="120"  y="86" text-anchor="middle" class="actor">User CLI</text>
+    <rect x="230"  y="65" width="120" height="32" class="actor-cli"/>
+    <text x="290"  y="86" text-anchor="middle" class="actor">cli.py</text>
+    <rect x="400"  y="65" width="140" height="32" class="actor-idx"/>
+    <text x="470"  y="86" text-anchor="middle" class="actor">indexer.py</text>
+    <rect x="590"  y="65" width="160" height="32" class="actor-strg"/>
+    <text x="670"  y="86" text-anchor="middle" class="actor">strategies(_semantic)</text>
+    <rect x="800"  y="65" width="120" height="32" class="actor-stor"/>
+    <text x="860"  y="86" text-anchor="middle" class="actor">store.py / SQLite</text>
+    <rect x="950"  y="65" width="130" height="32" class="actor-log"/>
+    <text x="1015" y="86" text-anchor="middle" class="actor">usage_log.py</text>
+
+    <line x1="120"  y1="97" x2="120"  y2="720" class="life"/>
+    <line x1="290"  y1="97" x2="290"  y2="720" class="life"/>
+    <line x1="470"  y1="97" x2="470"  y2="720" class="life"/>
+    <line x1="670"  y1="97" x2="670"  y2="720" class="life"/>
+    <line x1="860"  y1="97" x2="860"  y2="720" class="life"/>
+    <line x1="1015" y1="97" x2="1015" y2="720" class="life"/>
+  </g>
+
+  <!-- 1. user → cli -->
+  <path d="M120,120 L286,120" class="msg" marker-end="url(#ar)"/>
+  <text x="125" y="115" class="sm">① argv → __main__.py → cmd_index(args)</text>
+
+  <!-- 2. cli → store open -->
+  <path d="M290,150 L856,150" class="msg" marker-end="url(#ar)"/>
+  <text x="295" y="145" class="sm">② store.open_store(db_path_for(lang, strategy)) ＋ _migrate(v1→v5)</text>
+
+  <!-- 3. cli → indexer.build_index -->
+  <path d="M290,185 L466,185" class="msg" marker-end="url(#ar)"/>
+  <text x="295" y="180" class="sm">③ build_index(repo_root, roots, conn, rebuild, prune, max_chunk_chars, strategy, overlap_paragraphs)</text>
+
+  <!-- loop frame -->
+  <rect x="385" y="205" width="660" height="290" class="frame"/>
+  <text x="395" y="222" class="lbl" font-weight="700" fill="#525252">loop: iter_markdown(roots) で発見した各 .md について</text>
+
+  <!-- 4. indexer.index_one_file -->
+  <path d="M470,250 L470,260" class="msg"/>
+  <text x="480" y="255" class="sm">④ index_one_file: SHA1 = SHA1(bytes), mtime = stat.st_mtime</text>
+
+  <!-- 5. indexer → store check -->
+  <path d="M470,275 L856,275" class="msg" marker-end="url(#ar)"/>
+  <text x="478" y="270" class="sm">⑤ SELECT sha1 FROM files WHERE rel_path=?</text>
+  <path d="M856,295 L470,295" class="msgR" marker-end="url(#arR)"/>
+  <text x="478" y="290" class="sm">⑥ 一致 → return {"action":"skipped"}  /  不一致 or 新規 → 続行</text>
+
+  <!-- 7. strategies dispatch -->
+  <path d="M470,325 L666,325" class="msg" marker-end="url(#ar)"/>
+  <text x="478" y="320" class="sm">⑦ scan_file_for_strategy(strategy) → 該当 _scan_*</text>
+
+  <!-- 8. semantic optional -->
+  <rect x="595" y="345" width="350" height="55" rx="4" class="note-box"/>
+  <text x="605" y="362" class="note" font-weight="700" fill="#6B2C91">opt: strategy == "semantic_paragraph"</text>
+  <text x="605" y="378" class="sm">embeddings.embed_texts(intfloat/multilingual-e5-large) → Kamradt 二分探索で境界決定</text>
+  <text x="605" y="392" class="sm">contextualize() で `[Context] path > heading_path\n\nbody` を前置</text>
+
+  <!-- 9. strategies → indexer -->
+  <path d="M666,415 L474,415" class="msgR" marker-end="url(#arR)"/>
+  <text x="478" y="410" class="sm">⑧ chunks: list[Chunk] (chunk_id=SHA1(path,heading_path,part_index,text_first_64), parent_chunk_id)</text>
+
+  <!-- 10. indexer → store write -->
+  <path d="M470,450 L856,450" class="msg" marker-end="url(#ar)"/>
+  <text x="478" y="445" class="sm">⑨ upsert_file(rel, sha1, mtime, size, fm_json) + INSERT chunks (+chunks_fts mirror)</text>
+
+  <!-- 11. progress_callback (optional) -->
+  <path d="M470,478 L290,478" class="msgD" marker-end="url(#arD)"/>
+  <text x="295" y="473" class="sm">⑩ progress_callback(rel, current, total) — GUI 進捗用 (任意)</text>
+
+  <!-- prune phase -->
+  <rect x="385" y="510" width="660" height="60" class="frame"/>
+  <text x="395" y="528" class="lbl" font-weight="700" fill="#525252">prune (既定 ON, rebuild=False 時)</text>
+  <path d="M470,548 L856,548" class="msg" marker-end="url(#ar)"/>
+  <text x="478" y="543" class="sm">⑪ list_all_paths(conn) と seen を比較 → 失われたファイルを delete_file (CASCADE)</text>
+
+  <!-- 12. commit -->
+  <path d="M470,590 L856,590" class="msg" marker-end="url(#ar)"/>
+  <text x="478" y="585" class="sm">⑫ conn.commit() → summary {files_indexed, skipped, chunks_written, pruned_files, pruned_chunks}</text>
+
+  <!-- 13. summary return -->
+  <path d="M466,620 L294,620" class="msgR" marker-end="url(#arR)"/>
+  <text x="295" y="615" class="sm">⑬ summary を return</text>
+
+  <!-- 14. usage_log -->
+  <path d="M290,650 L1011,650" class="msgD" marker-end="url(#arD)"/>
+  <text x="295" y="645" class="sm">⑭ usage_log.append_record(command="index", args, elapsed_ms, result, exit_code=0) → .mdq/usage.jsonl</text>
+
+  <!-- 15. print JSON -->
+  <path d="M286,690 L124,690" class="msgR" marker-end="url(#arR)"/>
+  <text x="130" y="685" class="sm">⑮ print(json.dumps(summary)) → stdout</text>
+
+  <!-- footer -->
+  <text x="20" y="745" class="meta">凡例: 黒実線=同期呼び出し / 紫破線=任意機能 / 灰点線=戻り値・副次出力。  Q1=a (Handwritten SVG), Q2=b (Colored), 配色は WCAG AA 準拠。</text>
+</svg>

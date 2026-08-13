@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "dahatake のエージェントスキル集マーケットプレイス。",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "dahatake-skills",
-      "description": "ローカル Markdown 横断クエリなど、コーディングエージェント向けのスキルを提供します。",
-      "version": "0.1.0",
+      "description": "ローカル完結の Markdown 横断検索 (markdown-query) とソースコード検索 (code-query) を提供します。CLI 本体は各キットの install スクリプトで導入します。",
+      "version": "0.2.0",
       "source": ".",
       "homepage": "https://github.com/dahatake/skills",
       "repository": "https://github.com/dahatake/skills",
@@ -21,7 +21,7 @@
         "name": "dahatake",
         "url": "https://github.com/dahatake"
       },
-      "keywords": ["skills", "agent", "copilot", "markdown", "search"],
+      "keywords": ["skills", "agent", "copilot", "markdown", "code-search", "search"],
       "skills": "./skills/"
     }
   ]

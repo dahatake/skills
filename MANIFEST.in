@@ -1,7 +1,0 @@
-include README.md LICENSE
-recursive-exclude mdq/tests *
-recursive-exclude tools *
-recursive-exclude sample *
-recursive-exclude skills *
-recursive-exclude setup *
-global-exclude __pycache__ *.pyc *.pyo

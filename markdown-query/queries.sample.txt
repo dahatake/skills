@@ -1,0 +1,8 @@
+# Sample queries for `markdown-query` benchmark.
+# One query per line. Lines starting with `#` are ignored.
+# These five queries are taken from the SKILL.md examples.
+業務要件 概要
+ARD
+知識ベース
+ユースケース
+アーキテクチャ

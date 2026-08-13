@@ -1,0 +1,29 @@
+# cq configuration — copy to the root of your repository as `cq.toml`.
+#
+# `init_config.py` generates this file automatically; edit it by hand only when
+# the proposal needs adjusting. There are no implicit defaults: without this
+# file (or `.cq/config.toml`) every cq command fails closed.
+#
+# Schema reference: cq/config.py in the upstream HVE repository.
+
+[index]
+# Files larger than this are treated as build output and skipped. Default 2 MiB.
+max_file_bytes = 2097152
+
+# One profile per code base you want to query independently.
+# The index lives in `.cq/index-<profile>.sqlite`, so profiles never mix.
+# Profile names must match ^[a-z][a-z0-9_-]*$.
+[profiles.main]
+# Repository-relative directories. Root-level files cannot be covered:
+# a root must be a real subdirectory.
+roots = ["src"]
+# Optional. Applied on top of the built-in excludes
+# (**/vendor/**, **/node_modules/**, *.min.js, .env*, *.pem, *.key, *.pfx,
+#  *.p12, **/id_rsa*).
+exclude = [
+    # "src/generated/**",
+]
+
+# Example of a second profile for a different tree in the same repository.
+# [profiles.tools]
+# roots = ["scripts", "tools"]

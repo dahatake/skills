@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 780" role="img"
+     aria-labelledby="title desc" font-family="Segoe UI, Hiragino Sans, Meiryo, sans-serif">
+  <title id="title">markdown-query Skill 技術アーキテクチャ図</title>
+  <desc id="desc">
+    mdq パッケージの構成図。CLI 層、Indexing 層、Search 層、Watcher 層、Storage 層、
+    Logging 層、外部依存（任意）の 6 グループとそのデータフローを示す。
+    凡例: 実線=同期呼び出し、破線=任意機能/フォールバック、二重線=ディスク書き込み。
+  </desc>
+
+  <!-- =================== styles =================== -->
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1A1A1A"/>
+    </marker>
+    <marker id="arrowDash" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6B2C91"/>
+    </marker>
+    <marker id="arrowWrite" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#525252"/>
+    </marker>
+    <style><![CDATA[
+      .grp { fill-opacity: 1; stroke-width: 1.5; }
+      .grp-cli   { fill: #E8F1FB; stroke: #0066CC; }
+      .grp-idx   { fill: #E8F5EE; stroke: #006B3C; }
+      .grp-srch  { fill: #FBEEDB; stroke: #B85C00; }
+      .grp-watch { fill: #F1EBF5; stroke: #6B2C91; }
+      .grp-store { fill: #EEEEEE; stroke: #525252; }
+      .grp-ext   { fill: #FBE9E9; stroke: #8B0000; }
+      .box      { fill: white; stroke-width: 1.5; }
+      .b-cli    { stroke: #0066CC; }
+      .b-idx    { stroke: #006B3C; }
+      .b-srch   { stroke: #B85C00; }
+      .b-watch  { stroke: #6B2C91; }
+      .b-store  { stroke: #525252; }
+      .b-ext    { stroke: #8B0000; stroke-dasharray: 5 3; }
+      .lbl      { font-size: 13px; fill: #1A1A1A; }
+      .lbl-sm   { font-size: 11px; fill: #1A1A1A; }
+      .lbl-grp  { font-size: 15px; font-weight: 700; }
+      .lbl-cli  { fill: #0066CC; }
+      .lbl-idx  { fill: #006B3C; }
+      .lbl-srch { fill: #B85C00; }
+      .lbl-watch { fill: #6B2C91; }
+      .lbl-store { fill: #525252; }
+      .lbl-ext  { fill: #8B0000; }
+      .edge     { stroke: #1A1A1A; stroke-width: 1.4; fill: none; }
+      .edge-dash{ stroke: #6B2C91; stroke-width: 1.4; fill: none; stroke-dasharray: 6 3; }
+      .edge-write { stroke: #525252; stroke-width: 2.2; fill: none; }
+      .title-text { font-size: 20px; font-weight: 700; fill: #1A1A1A; }
+      .meta { font-size: 11px; fill: #555555; }
+    ]]></style>
+  </defs>
+
+  <!-- =================== title & metadata =================== -->
+  <text x="20" y="30" class="title-text">markdown-query Skill — 技術アーキテクチャ</text>
+  <text x="20" y="50" class="meta">SoT: mdq/ パッケージ (v0.6.0 / SCHEMA v7)  ·  最終更新: 2026-08-07  ·  対象読者: Skill カスタマイズ予定の開発者</text>
+
+  <!-- =================== invokers (top) =================== -->
+  <rect x="20" y="70" width="1060" height="80" rx="8" class="grp grp-cli"/>
+  <text x="35" y="92" class="lbl-grp lbl-cli">① 呼び出し元 (Invokers)</text>
+
+  <rect x="50" y="100" width="220" height="38" rx="4" class="box b-cli"/>
+  <text x="160" y="124" text-anchor="middle" class="lbl">Agent / Copilot / Claude / Codex</text>
+
+  <rect x="300" y="100" width="220" height="38" rx="4" class="box b-cli"/>
+  <text x="410" y="124" text-anchor="middle" class="lbl">User CLI (手動)</text>
+
+  <rect x="550" y="100" width="240" height="38" rx="4" class="box b-cli"/>
+  <text x="670" y="124" text-anchor="middle" class="lbl">GUI 設定画面 (settings_section.py)</text>
+
+  <rect x="820" y="100" width="240" height="38" rx="4" class="box b-cli"/>
+  <text x="940" y="124" text-anchor="middle" class="lbl">HVE Orchestrator (subprocess)</text>
+
+  <!-- =================== CLI entry =================== -->
+  <rect x="20" y="170" width="1060" height="70" rx="8" class="grp grp-cli"/>
+  <text x="35" y="192" class="lbl-grp lbl-cli">② CLI エントリ層</text>
+  <rect x="370" y="200" width="360" height="32" rx="4" class="box b-cli"/>
+  <text x="550" y="221" text-anchor="middle" class="lbl">python -m mdq  →  __main__.py  →  cli.py</text>
+  <text x="385" y="245" class="lbl-sm lbl-cli">サブコマンド: index / watch / search / get / list / stats</text>
+
+  <!-- Arrows from invokers to CLI -->
+  <path d="M160,138 L160,170" class="edge" marker-end="url(#arrow)"/>
+  <path d="M410,138 L410,170" class="edge" marker-end="url(#arrow)"/>
+  <path d="M670,138 L670,170" class="edge" marker-end="url(#arrow)"/>
+  <path d="M940,138 L940,170" class="edge" marker-end="url(#arrow)"/>
+
+  <!-- =================== Indexing pipeline =================== -->
+  <rect x="20" y="270" width="540" height="320" rx="8" class="grp grp-idx"/>
+  <text x="35" y="292" class="lbl-grp lbl-idx">③ Indexing パイプライン (cmd_index / cmd_watch)</text>
+
+  <rect x="40" y="305" width="200" height="40" rx="4" class="box b-idx"/>
+  <text x="140" y="330" text-anchor="middle" class="lbl">indexer.py</text>
+  <text x="140" y="343" text-anchor="middle" class="lbl-sm">build_index / index_one_file</text>
+
+  <rect x="280" y="305" width="240" height="40" rx="4" class="box b-idx"/>
+  <text x="400" y="330" text-anchor="middle" class="lbl">strategies.py</text>
+  <text x="400" y="343" text-anchor="middle" class="lbl-sm">scan_file_for_strategy()</text>
+
+  <rect x="40" y="370" width="160" height="40" rx="4" class="box b-idx"/>
+  <text x="120" y="394" text-anchor="middle" class="lbl">heading</text>
+  <text x="120" y="406" text-anchor="middle" class="lbl-sm">(_indexer.scan_file)</text>
+
+  <rect x="210" y="370" width="170" height="40" rx="4" class="box b-idx"/>
+  <text x="295" y="394" text-anchor="middle" class="lbl">heading_recursive</text>
+  <text x="295" y="406" text-anchor="middle" class="lbl-sm">(_subdivide)</text>
+
+  <rect x="390" y="370" width="160" height="40" rx="4" class="box b-idx"/>
+  <text x="470" y="394" text-anchor="middle" class="lbl">fixed_window</text>
+  <text x="470" y="406" text-anchor="middle" class="lbl-sm">(_scan_fixed_window)</text>
+
+  <rect x="40" y="430" width="510" height="40" rx="4" class="box b-idx" stroke-dasharray="5 3"/>
+  <text x="295" y="454" text-anchor="middle" class="lbl">semantic_paragraph  (strategies_semantic.py)</text>
+  <text x="295" y="466" text-anchor="middle" class="lbl-sm">Kamradt 二分探索 + heading hard boundary</text>
+
+  <rect x="40" y="490" width="160" height="40" rx="4" class="box b-idx" stroke-dasharray="5 3"/>
+  <text x="120" y="514" text-anchor="middle" class="lbl">embeddings.py</text>
+  <text x="120" y="526" text-anchor="middle" class="lbl-sm">fastembed (任意)</text>
+
+  <rect x="210" y="490" width="160" height="40" rx="4" class="box b-idx" stroke-dasharray="5 3"/>
+  <text x="290" y="514" text-anchor="middle" class="lbl">sentence_splitter</text>
+  <text x="290" y="526" text-anchor="middle" class="lbl-sm">nltk (fallback regex)</text>
+
+  <rect x="380" y="490" width="170" height="40" rx="4" class="box b-idx"/>
+  <text x="465" y="514" text-anchor="middle" class="lbl">contextualizer.py</text>
+  <text x="465" y="526" text-anchor="middle" class="lbl-sm">[Context] テンプレ前置</text>
+
+  <rect x="40" y="545" width="510" height="32" rx="4" class="box b-idx"/>
+  <text x="295" y="566" text-anchor="middle" class="lbl-sm">tokenize.py (FTS5 トークナイザ選択: ja-jp=trigram / en-us=unicode61)</text>
+
+  <!-- Indexing internal arrows -->
+  <path d="M240,325 L280,325" class="edge" marker-end="url(#arrow)"/>
+  <path d="M400,345 L400,365" class="edge" marker-end="url(#arrow)"/>
+  <path d="M400,410 L400,425" class="edge" marker-end="url(#arrow)"/>
+  <path d="M295,470 L295,485" class="edge-dash" marker-end="url(#arrowDash)"/>
+  <path d="M200,510 L210,510" class="edge-dash" marker-end="url(#arrowDash)"/>
+  <path d="M370,510 L380,510" class="edge-dash" marker-end="url(#arrowDash)"/>
+
+  <!-- =================== Search pipeline =================== -->
+  <rect x="580" y="270" width="500" height="190" rx="8" class="grp grp-srch"/>
+  <text x="595" y="292" class="lbl-grp lbl-srch">④ Search パイプライン (cmd_search / cmd_get)</text>
+
+  <rect x="600" y="305" width="220" height="40" rx="4" class="box b-srch"/>
+  <text x="710" y="330" text-anchor="middle" class="lbl">query_router.py</text>
+  <text x="710" y="343" text-anchor="middle" class="lbl-sm">classify_query (7 rules)</text>
+
+  <rect x="840" y="305" width="220" height="40" rx="4" class="box b-srch"/>
+  <text x="950" y="330" text-anchor="middle" class="lbl">search.py</text>
+  <text x="950" y="343" text-anchor="middle" class="lbl-sm">BM25 / grep / late fusion</text>
+
+  <rect x="600" y="370" width="220" height="38" rx="4" class="box b-srch" stroke-dasharray="5 3"/>
+  <text x="710" y="394" text-anchor="middle" class="lbl-sm">rank_bm25 (任意 / fallback: _MiniBM25)</text>
+
+  <rect x="840" y="370" width="220" height="38" rx="4" class="box b-srch"/>
+  <text x="950" y="394" text-anchor="middle" class="lbl-sm">_make_snippet (radius=±2 行)</text>
+
+  <rect x="600" y="418" width="460" height="32" rx="4" class="box b-srch"/>
+  <text x="830" y="439" text-anchor="middle" class="lbl-sm">discover_available_strategies → fallback chain (semantic→hr→h→fw)</text>
+
+  <path d="M820,325 L840,325" class="edge" marker-end="url(#arrow)"/>
+  <path d="M950,345 L950,365" class="edge-dash" marker-end="url(#arrowDash)"/>
+
+  <!-- =================== Watcher =================== -->
+  <rect x="580" y="475" width="500" height="115" rx="8" class="grp grp-watch"/>
+  <text x="595" y="497" class="lbl-grp lbl-watch">⑤ Watcher (HVE CLI Orchestrator のみ / Cloud では未使用)</text>
+
+  <rect x="600" y="510" width="220" height="40" rx="4" class="box b-watch"/>
+  <text x="710" y="535" text-anchor="middle" class="lbl">watcher.py / MdqWatcher</text>
+  <text x="710" y="548" text-anchor="middle" class="lbl-sm">daemon thread, debounce 500ms</text>
+
+  <rect x="840" y="510" width="220" height="40" rx="4" class="box b-watch" stroke-dasharray="5 3"/>
+  <text x="950" y="535" text-anchor="middle" class="lbl">watchdog (任意)</text>
+  <text x="950" y="548" text-anchor="middle" class="lbl-sm">未導入時は start()→False</text>
+
+  <rect x="600" y="556" width="460" height="28" rx="4" class="box b-watch"/>
+  <text x="830" y="575" text-anchor="middle" class="lbl-sm">burst threshold 100 件/1s → 全 root 再走査 fallback</text>
+
+  <!-- =================== Storage layer =================== -->
+  <rect x="20" y="610" width="730" height="160" rx="8" class="grp grp-store"/>
+  <text x="35" y="632" class="lbl-grp lbl-store">⑥ Storage 層 (.mdq/ 配下、gitignore 推奨)</text>
+
+  <rect x="40" y="645" width="220" height="50" rx="4" class="box b-store"/>
+  <text x="150" y="670" text-anchor="middle" class="lbl">store.py</text>
+  <text x="150" y="685" text-anchor="middle" class="lbl-sm">SCHEMA v5 / open_store / _migrate</text>
+
+  <rect x="280" y="645" width="450" height="50" rx="4" class="box b-store"/>
+  <text x="505" y="667" text-anchor="middle" class="lbl">.mdq/index-&lt;lang&gt;-&lt;strategy&gt;.sqlite</text>
+  <text x="505" y="685" text-anchor="middle" class="lbl-sm">tables: files, chunks (+chunks_fts FTS5 mirror, parent_chunk_id, text_raw, chunk_embedding)</text>
+
+  <rect x="40" y="710" width="690" height="46" rx="4" class="box b-store"/>
+  <text x="385" y="731" text-anchor="middle" class="lbl">db_path_for(lang, strategy) → 物理ファイル分離 (lang × strategy ごとに独立 DB)</text>
+  <text x="385" y="748" text-anchor="middle" class="lbl-sm">既定 11 ディレクトリ走査 (DEFAULT_ROOTS): docs, docs-generated, users-guide, template, knowledge, qa, original-docs, work, sample, session-state, hve-dev</text>
+
+  <!-- =================== Logging layer =================== -->
+  <rect x="770" y="610" width="310" height="160" rx="8" class="grp grp-store"/>
+  <text x="785" y="632" class="lbl-grp lbl-store">⑦ Logging / Stats</text>
+
+  <rect x="790" y="645" width="270" height="40" rx="4" class="box b-store"/>
+  <text x="925" y="670" text-anchor="middle" class="lbl">usage_log.py → .mdq/usage.jsonl</text>
+
+  <rect x="790" y="695" width="270" height="40" rx="4" class="box b-store"/>
+  <text x="925" y="720" text-anchor="middle" class="lbl">usage_stats.py (15 指標 + H1/H2)</text>
+
+  <rect x="790" y="744" width="270" height="22" rx="4" class="box b-store"/>
+  <text x="925" y="759" text-anchor="middle" class="lbl-sm">→ tools/skills/markdown_query/usage-report/</text>
+
+  <!-- =================== Major cross-layer flows =================== -->
+  <!-- CLI → Indexer -->
+  <path d="M450,232 L140,300" class="edge" marker-end="url(#arrow)"/>
+  <!-- CLI → Search router -->
+  <path d="M600,232 L710,300" class="edge" marker-end="url(#arrow)"/>
+  <!-- CLI → Watcher -->
+  <path d="M780,232 Q780,400 710,505" class="edge" marker-end="url(#arrow)"/>
+
+  <!-- Indexer → Store (write) -->
+  <path d="M140,575 L150,640" class="edge-write" marker-end="url(#arrowWrite)"/>
+  <!-- Search → Store (read) -->
+  <path d="M950,450 Q940,560 505,640" class="edge" marker-end="url(#arrow)"/>
+  <!-- Watcher → Store (write) -->
+  <path d="M710,580 L300,640" class="edge-write" marker-end="url(#arrowWrite)"/>
+  <!-- CLI → usage_log -->
+  <path d="M730,232 Q900,400 925,640" class="edge-dash" marker-end="url(#arrowDash)"/>
+
+  <!-- =================== Legend =================== -->
+  <g transform="translate(20,790)">
+    <!-- placed below viewBox – use bottom area inside -->
+  </g>
+  <rect x="800" y="55" width="280" height="10" fill="white" opacity="0"/>
+
+  <!-- Inline legend top-right -->
+  <g transform="translate(900,8)">
+    <rect x="0" y="0" width="190" height="55" fill="white" stroke="#525252"/>
+    <text x="6" y="13" class="lbl-sm" font-weight="700">凡例</text>
+    <line x1="6" y1="22" x2="36" y2="22" class="edge" marker-end="url(#arrow)"/>
+    <text x="42" y="25" class="lbl-sm">同期呼び出し</text>
+    <line x1="6" y1="35" x2="36" y2="35" class="edge-dash" marker-end="url(#arrowDash)"/>
+    <text x="42" y="38" class="lbl-sm">任意機能 / fallback</text>
+    <line x1="6" y1="48" x2="36" y2="48" class="edge-write" marker-end="url(#arrowWrite)"/>
+    <text x="42" y="51" class="lbl-sm">ディスク書き込み</text>
+  </g>
+</svg>

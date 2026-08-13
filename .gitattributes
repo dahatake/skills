@@ -1,0 +1,21 @@
+# Text files are normalised to LF in the index.
+* text=auto eol=lf
+# Reserved for future non-kit PowerShell scripts; kit .ps1 files are `-text` below.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.png binary
+
+# The distribution kits and their generated mirror in skills/ ship byte-for-byte
+# payloads whose SHA-256 hashes are recorded in KIT-VERSION.json. Any end-of-line
+# conversion would make `install.py --verify` report every file as modified on a
+# platform whose checkout rules differ from the one that produced the manifest.
+markdown-query/** -text
+code-query/** -text
+tool-search/** -text
+skills/** -text
+
+# ...except the shell entry points. Git for Windows defaults to
+# core.autocrlf=true, and a CRLF install.sh fails under bash / WSL / macOS with
+# "$'\r': command not found". These files are already LF, so pinning them here
+# does not change any recorded hash.
+*.sh text eol=lf

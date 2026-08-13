@@ -1,5 +1,5 @@
 {
   "name": "dahatake-skills",
-  "version": "0.1.0",
-  "description": "dahatake のエージェントスキル集。ローカル Markdown 横断クエリなど、コーディングエージェント向けのスキルを提供します。"
+  "version": "0.2.0",
+  "description": "dahatake のエージェントスキル集。ローカル完結の Markdown 横断検索 (markdown-query) とソースコード検索 (code-query) を提供します。CLI 本体は各キットの install スクリプトで導入します。"
 }
