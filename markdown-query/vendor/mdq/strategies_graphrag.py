@@ -81,7 +81,11 @@ class GraphRAGConfig:
     llm_provider: str = "ollama"
     llm_base_url: str = "http://127.0.0.1:11434"
     llm_model: str = "qwen2.5:7b"
-    llm_timeout: float = 120.0
+    # LightRAG issues extraction calls concurrently while Ollama serialises
+    # them, so a request's wall clock includes queue wait. 240s (LightRAG's
+    # own default) timed out on this repository's documents; 1200s covers the
+    # measured worst case with headroom. Also forwarded to LightRAG itself.
+    llm_timeout: float = 1200.0
     llm_num_predict: int | None = None
 
     # Embedding --------------------------------------------------------
@@ -147,11 +151,20 @@ async def _build_rag(working_dir: Path, cfg: GraphRAGConfig):
     try:
         from lightrag import LightRAG  # type: ignore
         from lightrag.utils import EmbeddingFunc  # type: ignore
+        from lightrag.kg.shared_storage import (  # type: ignore
+            finalize_share_data,
+        )
     except ImportError as e:
         raise GraphRAGUnavailable(
             f"graphrag: LightRAG is not installed: {e}. "
             "Install with: pip install -e .[graphrag]"
         ) from e
+
+    # LightRAG keeps storage state per process. Without dropping it, a second
+    # session in the same process (e.g. the GUI's 完全再ビルド) reports success
+    # while writing almost nothing to disk. This resets process-global state,
+    # so sessions must not overlap within one process.
+    finalize_share_data()
 
     # R4: import only from mdq.graphrag_runtime (never lightrag.llm.*).
     from mdq.graphrag_runtime import (
@@ -177,6 +190,12 @@ async def _build_rag(working_dir: Path, cfg: GraphRAGConfig):
             allow_remote=cfg.allow_remote_ollama,
             mock_dim=cfg.embed_mock_dim,
         )
+        # Ollama loads the model on first use (~2 min for a 7B model measured
+        # 2026-08-14). LightRAG issues extraction calls concurrently while
+        # Ollama serialises them, so an unprimed load lands inside a queued
+        # request and trips LightRAG's own worker timeout. Pay it once here,
+        # where a missing model also surfaces immediately.
+        await completion_fn("ok")
     except GraphRAGRuntimeUnavailable as e:
         raise GraphRAGUnavailable(str(e)) from e
     except ValueError as e:
@@ -190,6 +209,16 @@ async def _build_rag(working_dir: Path, cfg: GraphRAGConfig):
     rag = LightRAG(
         working_dir=str(working_dir),
         llm_model_func=completion_fn,
+        # Ollama processes one request at a time by default
+        # (OLLAMA_NUM_PARALLEL=1), so LightRAG's defaults only make the extra
+        # requests wait in Ollama's queue with the wait counted against their
+        # own timeout. Serialising both layers costs no throughput here.
+        llm_model_max_async=1,
+        max_parallel_insert=1,
+        # LightRAG aborts calls on its own timeouts, so raising only the HTTP
+        # timeouts leaves the configured values without effect.
+        default_llm_timeout=int(cfg.llm_timeout),
+        default_embedding_timeout=int(cfg.embed_timeout),
         embedding_func=EmbeddingFunc(
             embedding_dim=embed_dim,
             max_token_size=8192,

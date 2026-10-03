@@ -62,6 +62,10 @@ def defaults() -> Dict[str, Any]:
         # PAGEINDEX_* 定数（コード側 SoT）にフォールバックする。
         "pageindex_summary_chars": 0,         # 0=コード側既定 200 を採用
         "pageindex_summary_mode": "head",     # head / first_paragraph
+        # --- graphrag 戦略専用 ----------------------------------------
+        # CLI の --graphrag-timeout と 1:1 対応。0 は
+        # mdq.strategies_graphrag.GraphRAGConfig の既定を採用する。
+        "graphrag_llm_timeout": 0,            # 0=コード側既定 1200 秒を採用
     }
 
 
@@ -295,6 +299,27 @@ def get_semantic_runtime_config(
     # bool 系: 明示的に渡す（既定値を上書きするケースが正常パス）。
     out["contextualize"] = bool(mdq.get("semantic_contextualize", True))
     out["late_chunking"] = bool(mdq.get("semantic_late_chunking", False))
+    return out
+
+
+def get_graphrag_runtime_config(
+    repo_root: Path,
+    *,
+    settings: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Return overrides for ``mdq.strategies_graphrag.GraphRAGConfig``.
+
+    0 means "unset": the key is omitted so the dataclass default applies.
+    """
+    s = settings if settings is not None else load(repo_root)
+    mdq = s.get("mdq", {})
+    out: Dict[str, Any] = {}
+    try:
+        timeout = float(mdq.get("graphrag_llm_timeout", 0) or 0)
+    except (TypeError, ValueError):
+        timeout = 0.0
+    if timeout > 0:
+        out["llm_timeout"] = timeout
     return out
 
 

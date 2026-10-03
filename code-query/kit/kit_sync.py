@@ -20,8 +20,9 @@ from typing import Sequence
 
 # Repository-specific and non-portable material must not ship with an engine.
 # Directory names are matched at **any** depth: a GUI package under the engine
-# carries its own test package that must stay upstream.
-DROP_DIR_NAMES = ("tests", "__pycache__")
+# carries its own test package, and generated interpreter/type-checker caches
+# must stay upstream.
+DROP_DIR_NAMES = ("tests", "__pycache__", ".mypy_cache")
 DROP_FILE_NAMES = ("golden-queries.json", "golden-queries-holdout.json")
 
 # Skill appendices that only make sense inside the upstream repository.

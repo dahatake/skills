@@ -134,9 +134,10 @@ def _add_graphrag_args(p: argparse.ArgumentParser, *,
              "RuntimeWarning. Use only on trusted networks.",
     )
     p.add_argument(
-        "--graphrag-timeout", type=float, default=120.0,
+        "--graphrag-timeout", type=float, default=1200.0,
         help="graphrag: HTTP timeout for Ollama requests in seconds "
-             "(default: 120).",
+             "(default: 1200). Also applied to LightRAG's own execution "
+             "timeout so raising it takes effect end to end.",
     )
     if include_search:
         p.add_argument(
@@ -173,13 +174,12 @@ def _resolve_db(args: argparse.Namespace) -> str:
 def _graphrag_working_dir(args: argparse.Namespace) -> str:
     """Resolve LightRAG working directory.
 
-    Precedence: ``--graphrag-working-dir`` > ``.mdq/graphrag-<lang>/``.
+    Precedence: ``--graphrag-working-dir`` > :func:`mdq.store.graphrag_dir_for`.
     """
     wd = getattr(args, "graphrag_working_dir", None)
     if wd:
         return str(Path(wd))
-    lang = getattr(args, "lang", "ja-jp")
-    return str(Path(".mdq") / f"graphrag-{lang}")
+    return str(store.graphrag_dir_for(getattr(args, "lang", "ja-jp")))
 
 
 def _graphrag_apply_runtime_config(args: argparse.Namespace) -> None:

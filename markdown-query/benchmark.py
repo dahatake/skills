@@ -1,4 +1,4 @@
-﻿"""Benchmark `markdown-query` Skill against naive full-context baselines.
+"""Benchmark `markdown-query` Skill against naive full-context baselines.
 
 Goal
 ----

@@ -794,7 +794,8 @@ def index_one_file(repo_root: Path, file_path: Path, conn,
         parent_hp = hp.rsplit(" > ", 1)[0]
         c.parent_chunk_id = by_hp.get(parent_hp)
 
-    fm_json = json.dumps(fm, ensure_ascii=False) if fm else None
+    # `default=str`: unquoted YAML dates load as `datetime.date`, which json refuses.
+    fm_json = json.dumps(fm, ensure_ascii=False, default=str) if fm else None
     _store.upsert_file(conn, rel, sha1, mtime, len(raw), fm_json)
     _store.delete_chunks_for(conn, rel)
     rows = [(
@@ -926,6 +927,52 @@ def build_index(repo_root: Path, roots: Iterable[str], conn,
 # ``build_graphrag_index`` instead of ``build_index`` when
 # ``--strategy graphrag`` is selected.
 
+# Files LightRAG writes into its working directory. Presence of any of them
+# is what distinguishes a built index from a bare (or unrelated) directory.
+_LIGHTRAG_MARKERS = (
+    "kv_store_doc_status.json",
+    "kv_store_full_docs.json",
+    "kv_store_text_chunks.json",
+    "vdb_entities.json",
+    "vdb_relationships.json",
+    "vdb_chunks.json",
+    "graph_chunk_entity_relation.graphml",
+)
+
+
+def has_lightrag_index(working_dir: Path) -> bool:
+    """Return True when ``working_dir`` holds a LightRAG index.
+
+    An existing but empty directory is not an index: ``build_graphrag_index``
+    creates the directory before LightRAG runs, so a build that fails (e.g.
+    the optional extra is missing) leaves one behind.
+    """
+    working_dir = Path(working_dir)
+    return any((working_dir / marker).exists() for marker in _LIGHTRAG_MARKERS)
+
+
+def read_doc_status_counts(working_dir: Path) -> dict[str, int]:
+    """Return ``{status: count}`` as recorded by LightRAG for ``working_dir``.
+
+    ``ainsert`` swallows per-document extraction failures, so a returning call
+    is not evidence that the document was indexed. LightRAG records the real
+    outcome in ``kv_store_doc_status.json``.
+    """
+    path = Path(working_dir) / "kv_store_doc_status.json"
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    counts: dict[str, int] = {}
+    for record in raw.values():
+        if not isinstance(record, dict):
+            continue
+        status = str(record.get("status", "unknown"))
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
 def build_graphrag_index(
     repo_root: Path,
     roots: Iterable[str],
@@ -979,16 +1026,7 @@ def build_graphrag_index(
         # directory. If the user accidentally points --graphrag-working-dir
         # at an unrelated path (e.g. their home directory or `/`), refuse to
         # delete its contents. Empty directories are allowed.
-        _LIGHTRAG_MARKERS = (
-            "kv_store_doc_status.json",
-            "kv_store_full_docs.json",
-            "kv_store_text_chunks.json",
-            "vdb_entities.json",
-            "vdb_relationships.json",
-            "vdb_chunks.json",
-            "graph_chunk_entity_relation.graphml",
-        )
-        has_marker = any((working_dir / m).exists() for m in _LIGHTRAG_MARKERS)
+        has_marker = has_lightrag_index(working_dir)
         try:
             is_empty = not any(working_dir.iterdir())
         except OSError:
@@ -1014,6 +1052,8 @@ def build_graphrag_index(
             "files_ok": 0,
             "files_skipped": 0,
             "files_error": 0,
+            "documents_processed": 0,
+            "documents_failed": 0,
             "errors": [],
         }
 
@@ -1050,6 +1090,7 @@ def build_graphrag_index(
             files_error += 1
             errors.append((rel, status))
 
+    status_counts = read_doc_status_counts(working_dir)
     return {
         "strategy": "graphrag",
         "working_dir": str(working_dir),
@@ -1057,5 +1098,7 @@ def build_graphrag_index(
         "files_ok": files_ok,
         "files_skipped": files_skipped,
         "files_error": files_error,
+        "documents_processed": int(status_counts.get("processed", 0)),
+        "documents_failed": int(status_counts.get("failed", 0)),
         "errors": errors,
     }

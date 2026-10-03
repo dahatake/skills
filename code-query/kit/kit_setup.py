@@ -119,6 +119,32 @@ def install_skill(
     print(f"{label} wrote {target}")
 
 
+def install_hooks(kit_dir: Path, repo_root: Path, force: bool, label: str) -> None:
+    """Place the kit's hook templates into `.github/hooks/`, rendering `{kit}`.
+
+    `{kit}` becomes the kit directory relative to the repository root, so the
+    hook command works wherever the kit was copied. Kits without `hooks/` are
+    unaffected.
+    """
+    source = kit_dir / "hooks"
+    if not source.is_dir():
+        return
+    try:
+        kit_path = kit_dir.relative_to(repo_root).as_posix()
+    except ValueError:
+        kit_path = kit_dir.as_posix()
+    target_dir = repo_root / ".github" / "hooks"
+    for template in sorted(source.glob("*.json")):
+        target = target_dir / template.name
+        if target.is_file() and not force:
+            print(f"{label} {target} already exists; keeping it (use --force to overwrite).")
+            continue
+        target_dir.mkdir(parents=True, exist_ok=True)
+        text = template.read_text(encoding="utf-8").replace("{kit}", kit_path)
+        target.write_text(text, encoding="utf-8")
+        print(f"{label} wrote {target}")
+
+
 def _env_with_vendor(kit_dir: Path) -> dict[str, str]:
     env = dict(os.environ)
     vendor = str(vendor_dir(kit_dir))
@@ -191,6 +217,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.install_skill:
         install_skill(kit_dir, repo_root, skill, args.force, label)
+        install_hooks(kit_dir, repo_root, args.force, label)
 
     if args.build_index:
         build_index(kit_dir, interpreter, engine, repo_root, profile, manifest, label)

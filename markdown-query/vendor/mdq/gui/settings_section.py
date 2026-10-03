@@ -51,6 +51,7 @@ from .threads import IndexRefreshThread, UsageReportThread
 # Phase 3 additions
 from .semantic_options import SemanticOptionsWidget
 from .pageindex_options import PageIndexOptionsWidget
+from .graphrag_options import GraphRagOptionsWidget
 from .search_preview_panel import TestSearchPanel
 
 
@@ -62,6 +63,15 @@ def _all_strategies() -> tuple[str, ...]:
     No.5 で DRY 違反を解消)。
     """
     return settings_store.known_strategies()
+
+
+def _count_text(value) -> str:
+    """Render a count, showing ``-`` when the index does not expose one.
+
+    ``graphrag`` stores its index in LightRAG, so file/chunk counts are
+    unknown and must not be displayed as 0.
+    """
+    return "-" if value is None else str(int(value))
 
 
 class MdqIndexSection(QWidget):
@@ -188,6 +198,15 @@ class MdqIndexSection(QWidget):
         self._pageindex_options_widget.setVisible(
             self._strategy == "pageindex"
         )
+        # graphrag 専用設定。
+        self._graphrag_options_widget = GraphRagOptionsWidget()
+        self._graphrag_options_widget.changed.connect(
+            self._on_graphrag_options_changed
+        )
+        self._graphrag_options_widget.load_from(_saved_mdq)
+        self._graphrag_options_widget.setVisible(
+            self._strategy == "graphrag"
+        )
         self._test_search_panel = TestSearchPanel(repo_root=repo_root)
         self._test_search_panel.set_context(
             lang=self._lang, strategy=self._strategy,
@@ -216,6 +235,7 @@ class MdqIndexSection(QWidget):
         basic_layout.addWidget(self._semantic_options_widget)
         # pageindex 専用設定（Strategy 切替で可視/不可視）。
         basic_layout.addWidget(self._pageindex_options_widget)
+        basic_layout.addWidget(self._graphrag_options_widget)
         # 説明文は親ウィジェット幅に動的追従（word wrap のみ、固定幅不使用）。
         _desc_lang = QLabel(
             self.tr(
@@ -282,7 +302,8 @@ class MdqIndexSection(QWidget):
         self._bulk_build_desc_label = QLabel(self.tr(
             "複数の Strategy のインデックスをまとめてビルドします。"
             "全 Strategy はクエリ時に自動選択 (query_router) で利用されるため、"
-            "通常は全選択を推奨します。各 Strategy は別 DB ファイルに保存されます。"
+            "通常は全選択を推奨します。各 Strategy は個別の索引に保存されます"
+            "（graphrag のみ LightRAG 作業ディレクトリ、他は Strategy 別 DB ファイル）。"
         ))
         self._bulk_build_desc_label.setWordWrap(True)
         self._bulk_build_desc_label.setSizePolicy(
@@ -598,6 +619,13 @@ class MdqIndexSection(QWidget):
             )
         except AttributeError:
             pass
+        # graphrag 専用 widget の可視性を更新。
+        try:
+            self._graphrag_options_widget.setVisible(
+                self._strategy == "graphrag"
+            )
+        except AttributeError:
+            pass
         try:
             self._test_search_panel.set_context(
                 lang=self._lang, strategy=self._strategy,
@@ -629,6 +657,18 @@ class MdqIndexSection(QWidget):
     def _on_pageindex_options_changed(self) -> None:
         """PageIndexOptionsWidget の変更を [mdq] へ永続化する。"""
         self._persist_settings()
+
+    def _on_graphrag_options_changed(self) -> None:
+        """GraphRagOptionsWidget の変更を [mdq] へ永続化する。"""
+        self._persist_settings()
+
+    def _graphrag_runtime_kwargs(self) -> dict | None:
+        if self._strategy != "graphrag":
+            return None
+        try:
+            return self._graphrag_options_widget.to_runtime_kwargs()
+        except AttributeError:
+            return None
 
     def _resolve_fusion_alpha(self) -> float | None:
         """Q9=A: late_chunking ON + semantic_paragraph 時のみ alpha を返す。"""
@@ -690,6 +730,7 @@ class MdqIndexSection(QWidget):
                 pi_opts = None
         self._start_refresh_thread(
             force=True, semantic_options=sem_opts, pageindex_options=pi_opts,
+            graphrag_options=self._graphrag_runtime_kwargs(),
         )
 
     def _on_delete_db_clicked(self) -> None:
@@ -734,6 +775,7 @@ class MdqIndexSection(QWidget):
     def _start_refresh_thread(
         self, *, force: bool = False, semantic_options: dict | None = None,
         pageindex_options: dict | None = None,
+        graphrag_options: dict | None = None,
     ) -> None:
         """共通: refresh thread の起動。差分更新 / 完全再ビルド両方が利用。"""
         self._btn_incremental_refresh.setEnabled(False)
@@ -754,6 +796,7 @@ class MdqIndexSection(QWidget):
             force=force,
             semantic_options=semantic_options,
             pageindex_options=pageindex_options,
+            graphrag_options=graphrag_options,
             settings_backend=self._settings_store,
             parent=self,
         )
@@ -794,6 +837,11 @@ class MdqIndexSection(QWidget):
                 mdq.update(self._pageindex_options_widget.to_settings_dict())
             except AttributeError:
                 pass  # 移行期防御
+            # graphrag 専用 widget の値を merge。
+            try:
+                mdq.update(self._graphrag_options_widget.to_settings_dict())
+            except AttributeError:
+                pass  # 移行期防御
             cur["mdq"] = mdq
             self._settings_store.save(self._repo_root, cur)
         except Exception as exc:  # pragma: no cover - defensive
@@ -821,14 +869,25 @@ class MdqIndexSection(QWidget):
             f"最終更新: {stats.get('db_mtime', '-')}\n"
             f"Schema Version: {stats.get('schema_version', '-')}\n"
             f"FTS5: {'有効' if stats.get('fts5_enabled') else '無効'}\n"
-            f"ファイル数: {stats.get('files', 0)}\n"
-            f"チャンク数: {stats.get('chunks', 0)}\n"
+            f"ファイル数: {_count_text(stats.get('files', 0))}\n"
+            f"チャンク数: {_count_text(stats.get('chunks', 0))}\n"
             f"前回差分更新時間: {elapsed}\n"
             "ルート別件数:\n"
             f"{roots_block}"
         )
 
     def _format_summary(self, summary: dict) -> str:
+        if summary.get("strategy") == "graphrag":
+            return (
+                "graphrag ビルド完了: "
+                f"files_total={summary.get('files_total', 0)}, "
+                f"files_ok={summary.get('files_ok', 0)}, "
+                f"files_skipped={summary.get('files_skipped', 0)}, "
+                f"files_error={summary.get('files_error', 0)}, "
+                f"documents_processed={summary.get('documents_processed', 0)}, "
+                f"documents_failed={summary.get('documents_failed', 0)}, "
+                f"elapsed_ms={summary.get('elapsed_ms', 0)}"
+            )
         return (
             "差分更新完了: "
             f"files_indexed={summary.get('files_indexed', 0)}, "
@@ -877,8 +936,8 @@ class MdqIndexSection(QWidget):
         for row, strategy in enumerate(strategies):
             st = all_stats.get(strategy, {})
             db_exists = bool(st.get("db_exists", False))
-            files = int(st.get("files", 0))
-            chunks = int(st.get("chunks", 0))
+            files = _count_text(st.get("files", 0))
+            chunks = _count_text(st.get("chunks", 0))
             # No.18: error フィールドがあれば最終更新列にエラー要約を表示
             err = st.get("error")
             if err:
@@ -890,8 +949,8 @@ class MdqIndexSection(QWidget):
             values = [
                 strategy,
                 self.tr("有り") if db_exists else self.tr("無し"),
-                str(files),
-                str(chunks),
+                files,
+                chunks,
                 mtime,
             ]
             for col, val in enumerate(values):
@@ -985,6 +1044,10 @@ class MdqIndexSection(QWidget):
             lang=self._lang,
             strategy=next_strategy,
             overlap_paragraphs=int(self._overlap_paragraphs),
+            graphrag_options=(
+                self._graphrag_options_widget.to_runtime_kwargs()
+                if next_strategy == "graphrag" else None
+            ),
             settings_backend=self._settings_store,
             parent=self,
         )
@@ -1103,6 +1166,7 @@ class MdqIndexSection(QWidget):
                 pi_opts = None
         self._start_refresh_thread(
             force=False, semantic_options=sem_opts, pageindex_options=pi_opts,
+            graphrag_options=self._graphrag_runtime_kwargs(),
         )
 
     def _on_refresh_succeeded(self, summary: dict) -> None:

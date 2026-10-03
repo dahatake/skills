@@ -21,12 +21,44 @@ from cq.languages.linescan import brace_delta
 # --------------------------------------------------------------------------
 
 _FUNCTION_VALUED = frozenset({"function_expression", "arrow_function", "generator_function"})
+# テストブロックの先頭語。Jest / Mocha / Vitest / Playwright はこの 3 語を共有する。
+_TEST_CALLEES = frozenset({"describe", "it", "test"})
+
+
+def _test_block_label(node, src) -> str:
+    """Label of a `describe(...)` / `it(...)` / `test(...)` statement, else `""`.
+
+    The node is the wrapping `expression_statement`, not the call: chunk naming
+    only consults nodes listed in `Grammar.kinds`, and it stops descending once a
+    node fits the size budget. Keying on the call itself would produce the symbol
+    but leave the chunk's `name` / `signature` columns empty, which are the two
+    highest BM25 weights.
+    """
+    call = next((c for c in node.named_children if c.type == "call_expression"), None)
+    if call is None:
+        return ""
+    callee = call.child_by_field_name("function")
+    if callee is not None and callee.type == "member_expression":  # `it.skip(...)`
+        callee = callee.child_by_field_name("object")
+    if callee is None or callee.type != "identifier":
+        return ""
+    if ts.text(callee, src) not in _TEST_CALLEES:
+        return ""
+    arguments = call.child_by_field_name("arguments")
+    if arguments is None:
+        return ""
+    for argument in arguments.named_children:
+        # ラベルは必ず第 1 引数。そうでなければテストブロックではない。
+        return ts.text(argument, src)[1:-1] if argument.type in ("string", "template_string") else ""
+    return ""
 
 
 def _name_of(node, src) -> str:
     """`variable_declarator` covers every `const/let/var` binding, so only a
     function-valued, non-destructured one is a symbol (`const x = 5` and
     `const { a } = obj` are not)."""
+    if node.type == "expression_statement":
+        return _test_block_label(node, src)
     if node.type != "variable_declarator":
         return ts.field_name(node, src)
     value = node.child_by_field_name("value")
@@ -37,6 +69,8 @@ def _name_of(node, src) -> str:
 
 
 def _is_test(node, src, name: str) -> bool:
+    if node.type == "expression_statement":
+        return True  # `_name_of` がテストブロック以外を既に除外している。
     return name.startswith("test") or name.startswith("Test")
 
 
@@ -56,6 +90,7 @@ GRAMMAR = ts.Grammar(
         # "method" rather than relying on the class-scope promotion.
         "method_definition": "method",
         "variable_declarator": "function",  # only fires per `_name_of` above
+        "expression_statement": "function",  # only fires for test blocks per `_name_of`
     },
     scopes={"class_declaration": "class"},
     name_of=_name_of,

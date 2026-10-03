@@ -28,6 +28,7 @@ class IndexRefreshThread(QThread):
         force: bool = False,
         semantic_options: dict | None = None,
         pageindex_options: dict | None = None,
+        graphrag_options: dict | None = None,
         settings_backend: Optional[SettingsBackend] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
@@ -39,6 +40,7 @@ class IndexRefreshThread(QThread):
         self._force = bool(force)
         self._semantic_options = semantic_options
         self._pageindex_options = pageindex_options
+        self._graphrag_options = graphrag_options
         self._settings_backend = settings_backend
 
     def run(self) -> None:  # type: ignore[override]
@@ -51,6 +53,7 @@ class IndexRefreshThread(QThread):
                 force=self._force,
                 semantic_options=self._semantic_options,
                 pageindex_options=self._pageindex_options,
+                graphrag_options=self._graphrag_options,
                 settings_backend=self._settings_backend,
                 progress_callback=self._emit_progress,
             )

@@ -64,6 +64,8 @@ def build_parser() -> argparse.ArgumentParser:
     index = sub.add_parser("index", help="build or update the index")
     _add_common(index)
     index.add_argument("--rebuild", action="store_true")
+    index.add_argument("--embed", action="store_true",
+                       help="also build the vector side-index for --semantic (FR-CQ-17)")
 
     stats = sub.add_parser("stats", help="report index contents")
     _add_common(stats)
@@ -79,8 +81,12 @@ def build_parser() -> argparse.ArgumentParser:
     find.add_argument("--regex-max-candidates", type=int,
                       default=search.DEFAULT_REGEX_MAX_CANDIDATES)
     find.add_argument("--paths", default=None, help="GLOB filter over repository paths")
+    find.add_argument("--semantic", action="store_true",
+                      help="add the vector route and merge the ranked lists (FR-CQ-17)")
+    find.add_argument("--explain", action="store_true",
+                      help="append the per-route execution record as the last line")
     find.add_argument(
-        "--return-unit", default="line", choices=("line", "chunk"),
+        "--return-unit", default="line", choices=("line", "chunk", "symbol"),
         help="excerpt granularity: 'line' keeps the --snippet-radius window;"
              " 'chunk' returns the whole matching chunk and widens 'lines' to"
              " match, which fills --max-tokens with fewer hits",
@@ -194,8 +200,20 @@ def _dispatch(
         report = indexer.build_index(
             repo_root, profile, db_path=_db_path(args, repo_root), rebuild=args.rebuild
         )
-        result.update(report.to_dict())
-        _emit(report.to_dict())
+        payload = report.to_dict()
+        if args.embed:
+            from cq import embeddings, semantic_index
+
+            try:
+                provider = embeddings.get_provider()
+            except embeddings.EmbeddingsUnavailable as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            payload["vectors"] = semantic_index.build(
+                repo_root, profile.name, provider, db_path=_db_path(args, repo_root)
+            )
+        result.update(payload)
+        _emit(payload)
         return 0
 
     if args.command == "stats":
@@ -213,12 +231,16 @@ def _dispatch(
             paths=args.paths, return_unit=args.return_unit,
             db_path=_db_path(args, repo_root),
             auto_reindex_limit=args.auto_reindex_limit,
+            semantic=args.semantic,
         )
         for hit in hits:
             _emit_line(hit.to_dict())
         staleness = search.last_staleness()
         if staleness is not None:
             _emit_line(staleness)
+        activity = search.last_activity()
+        if args.explain and activity is not None:
+            _emit_line(activity)
         result["hit_count"] = len(hits)
         return 0
 

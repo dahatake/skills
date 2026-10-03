@@ -147,8 +147,9 @@ def _language_breakdown(conn: sqlite3.Connection) -> dict[str, dict]:
     """Per-language counts (FR-CQ-15).
 
     `by_parser` alone cannot show where fidelity dropped, because one parser
-    name is shared by several languages (C# and JavaScript are both `regex`).
-    The language is read from the index as-is and never re-derived here.
+    name is shared by several languages (C# and JavaScript are both
+    `tree-sitter`). The language is read from the index as-is and never
+    re-derived here.
     """
     parsers: dict[str, dict[str, int]] = {}
     for lang, parser, count in conn.execute(

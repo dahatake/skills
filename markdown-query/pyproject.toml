@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "markdown-query-gui"
-version = "0.2.0"
+version = "0.3.0"
 description = "Standalone GUI for the markdown-query Skill (PySide6)"
 requires-python = ">=3.11"
 license = { text = "MIT" }

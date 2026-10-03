@@ -9,8 +9,7 @@ that does not already have `mdq` installed, the launcher scripts
 
 ## Source of truth
 
-- Upstream: `mdq/` at the root of the HVE source repository
-  (https://github.com/dahatake/RoyalytyService2ndGen).
+- `mdq/` at the root of the distribution source repository.
 
 ## Vendored modules (current snapshot)
 

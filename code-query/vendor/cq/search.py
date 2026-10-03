@@ -38,6 +38,13 @@ _CJK_RE = re.compile(
 )
 # BM25 の重み: 名前 > シグネチャ > 識別子展開 > 本文
 _BM25_WEIGHTS = "10.0, 5.0, 3.0, 1.0"
+# 順位の逆数和に加える定数。小さいほど 1 位の影響が強くなる（FR-CQ-16）。
+_RRF_K = 60
+# リテラル一致の経路。順位の逆数和は「多くの経路に現れる候補」を優遇するが、
+# これらは問いの文字列そのものを含む場所を返すため、構造的に 1 票しか得られない。
+_LITERAL_ROUTES = frozenset({"trace", "symbol", "substr"})
+# 融合前に各経路から取る候補数の倍率。浅いと候補集合の和しか取れず順位が組み直されない。
+_FUSE_POOL_FACTOR = 4
 
 
 class SearchError(RuntimeError):
@@ -47,11 +54,19 @@ class SearchError(RuntimeError):
 _LAST_STALENESS: ContextVar[dict[str, Any] | None] = ContextVar(
     "cq_last_staleness", default=None
 )
+_LAST_ACTIVITY: ContextVar[dict[str, Any] | None] = ContextVar(
+    "cq_last_activity", default=None
+)
 
 
 def last_staleness() -> dict[str, Any] | None:
     """Staleness warning produced by the most recent :func:`search` call."""
     return _LAST_STALENESS.get()
+
+
+def last_activity() -> dict[str, Any] | None:
+    """Per-route execution record of the most recent fused :func:`search` call."""
+    return _LAST_ACTIVITY.get()
 
 
 class ChunkPayload(TypedDict):
@@ -103,9 +118,10 @@ class Hit:
             "lines": self.lines,
             "route": self.route,
             "score": round(self.score, 4),
-            "snippet": self.snippet,
             "parser": self.parser,
         }
+        if self.snippet:  # `symbol` 返却単位では本文を持たない（FR-CQ-17）
+            payload["snippet"] = self.snippet
         for key in ("chunk_id", "qualname", "kind", "signature"):
             value = getattr(self, key)
             if value is not None:
@@ -154,8 +170,12 @@ def search(
     return_unit: str = "line",
     db_path: Path | None = None,
     auto_reindex_limit: int | None = DEFAULT_AUTO_REINDEX_LIMIT,
+    semantic: bool = False,
+    provider: Any = None,
+    vector_path: Path | None = None,
 ) -> list[Hit]:
     _LAST_STALENESS.set(None)
+    _LAST_ACTIVITY.set(None)
     if query is None and regex is None:
         raise SearchError("either a query or a regex is required")
     if mode != "auto" and mode not in ROUTES:
@@ -167,14 +187,172 @@ def search(
     order = [route] if mode != "auto" else _fallback_order(route)
 
     with closing(store.open_store(target, create=False)) as conn:
+        # 語彙経路だけの統合は golden 56 問で逐次 fallback と同順位だったので、
+        # 意味検索層を含むときだけ統合する（FR-CQ-16）。
+        if semantic and query and len(order) > 1:
+            neighbours = _semantic_neighbours(conn, repo_root, profile, query, top_k,
+                                              provider, vector_path)
+            hits = _fuse(conn, order, query, regex, top_k, snippet_radius,
+                         regex_max_candidates, paths, neighbours)
+            if hits:
+                _apply_return_unit(conn, hits, return_unit)
+                return _cap_tokens(hits, max_tokens)
+            return []
         for candidate in order:
             hits = _run(conn, candidate, query, regex, top_k, snippet_radius,
                         regex_max_candidates, paths, explicit=mode != "auto")
             if hits:
-                if return_unit == "chunk":
-                    _widen_to_chunk_bodies(conn, hits)
+                _apply_return_unit(conn, hits, return_unit)
                 return _cap_tokens(hits, max_tokens)
     return []
+
+
+def _apply_return_unit(conn, hits: Sequence[Hit], return_unit: str) -> None:
+    if return_unit == "chunk":
+        _widen_to_chunk_bodies(conn, hits)
+    elif return_unit == "symbol":
+        _reduce_to_symbols(conn, hits)
+
+
+def _reduce_to_symbols(conn, hits: Sequence[Hit]) -> None:
+    """Drop the body and attach the enclosing symbol's name and kind (FR-CQ-17).
+
+    Measured on the 56-query golden set (top-3, default route): the response
+    drops from 159 to 66 tokens. Joining ``symbols`` costs 15 of those tokens
+    but doubles the hits that carry a name (31/80 -> 62/80); without it most
+    hits would be a path and a line range only.
+    """
+    for hit in hits:
+        hit.snippet = ""
+        if hit.qualname is None:
+            row = conn.execute(
+                "SELECT qualname, kind, signature FROM symbols WHERE path = ? "
+                "AND start_line <= ? AND end_line >= ? "
+                "ORDER BY end_line - start_line LIMIT 1",
+                (hit.path, hit.lines[0], hit.lines[0]),
+            ).fetchone()
+            if row is not None:
+                hit.qualname = row["qualname"]
+                hit.kind = row["kind"]
+                hit.signature = hit.signature or row["signature"] or None
+
+
+def _semantic_neighbours(conn, repo_root, profile, query, top_k, provider, vector_path):
+    """Chunk ids ranked by cosine, or ``[]`` when vectors are unusable (FR-CQ-17).
+
+    Every failure mode -- no optional backend, no vector store, a store built
+    with another model, a file that changed since the vectors were made --
+    degrades to "no semantic candidates" rather than an error, so enabling the
+    route can never make an existing search fail.
+    """
+    from cq import embeddings, vectors
+
+    try:
+        encoder = provider if provider is not None else embeddings.get_provider()
+    except embeddings.EmbeddingsUnavailable:
+        return []
+    target = (
+        Path(vector_path) if vector_path
+        else repo_root / vectors.db_path_for(profile)
+    )
+    fresh = {
+        row["path"]: row["sha1"]
+        for row in conn.execute("SELECT path, sha1 FROM files")
+    }
+    pool = vectors.read_all(target, encoder.model, fresh)
+    if not pool:
+        return []
+    try:
+        vector = encoder.embed([query])[0]
+    except Exception:  # noqa: BLE001 - encoding must never break the search
+        return []
+    return vectors.rank(vector, pool, top_k * _FUSE_POOL_FACTOR)
+
+
+def _semantic_hits(conn, neighbours, radius, paths) -> list[Hit]:
+    """Turn ranked chunk ids into hits, keeping the cosine order."""
+    if not neighbours:
+        return []
+    clause, params = _path_clause(paths, "c.path")
+    placeholders = ",".join("?" for _ in neighbours)
+    rows = conn.execute(
+        "SELECT c.chunk_id, c.path, c.start_line, c.end_line, c.text, c.name, "
+        "c.signature, f.parser FROM chunks c JOIN files f ON f.path = c.path "
+        f"WHERE c.chunk_id IN ({placeholders}){clause}",
+        [chunk_id for chunk_id, _ in neighbours] + params,
+    ).fetchall()
+    by_id = {row["chunk_id"]: row for row in rows}
+    hits = []
+    for chunk_id, score in neighbours:
+        row = by_id.get(chunk_id)
+        if row is None:
+            continue
+        hits.append(_chunk_hit(row, "semantic", score, "", radius))
+    return hits
+
+
+def _fuse(conn, order, query, regex, top_k, radius, regex_max, paths,
+          neighbours=()) -> list[Hit]:
+    """Run every route and merge the ranked lists by reciprocal rank (FR-CQ-16).
+
+    Scores are never compared across routes: ``bm25`` returns SQLite's negative
+    rank while ``symbol`` returns a fixed 1.0/0.5, so only the position within
+    each route's own list carries comparable information.
+
+    ``_LITERAL_ROUTES`` bypass the merge and keep their own order at the head.
+    Measured on the 56-query golden set, merging them in dropped ``symbol``
+    top-1 from 1.00 to 0.77 and ``substr`` from 1.00 to 0.57: a literal match
+    appears in one route only, while incidental matches appear in three.
+    """
+    pool = top_k * _FUSE_POOL_FACTOR
+    literal: list[Hit] = []
+    taken: set[tuple[str, int, int]] = set()
+    merged: dict[tuple[str, int, int], Hit] = {}
+    scores: dict[tuple[str, int, int], float] = {}
+    best_rank: dict[tuple[str, int, int], int] = {}
+    per_route: list[dict[str, Any]] = []
+
+    for candidate in order:
+        limit = top_k if candidate in _LITERAL_ROUTES else pool
+        hits = _run(conn, candidate, query, regex, limit, radius, regex_max, paths,
+                    explicit=False)
+        per_route.append({"route": candidate, "hits": len(hits)})
+        if candidate in _LITERAL_ROUTES:
+            for hit in hits:
+                key = (hit.path, hit.lines[0], hit.lines[1])
+                if key not in taken:
+                    taken.add(key)
+                    literal.append(hit)
+            continue
+        for rank, hit in enumerate(hits, start=1):
+            key = (hit.path, hit.lines[0], hit.lines[1])
+            scores[key] = scores.get(key, 0.0) + 1.0 / (_RRF_K + rank)
+            if key not in merged or rank < best_rank[key]:
+                merged[key] = hit
+                best_rank[key] = rank
+
+    semantic = _semantic_hits(conn, neighbours, radius, paths)
+    if neighbours:
+        per_route.append({"route": "semantic", "hits": len(semantic)})
+    for rank, hit in enumerate(semantic, start=1):
+        key = (hit.path, hit.lines[0], hit.lines[1])
+        scores[key] = scores.get(key, 0.0) + 1.0 / (_RRF_K + rank)
+        if key not in merged or rank < best_rank[key]:
+            merged[key] = hit
+            best_rank[key] = rank
+
+    ranked = [k for k in sorted(merged, key=lambda k: (-scores[k], k)) if k not in taken]
+    _LAST_ACTIVITY.set({
+        "routes": per_route,
+        "literal": len(literal),
+        "merged": len(ranked),
+    })
+    out = list(literal)
+    for key in ranked:
+        hit = merged[key]
+        hit.score = scores[key]
+        out.append(hit)
+    return out[:top_k]
 
 
 def _widen_to_chunk_bodies(conn, hits: Sequence[Hit]) -> None:

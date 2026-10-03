@@ -6,7 +6,7 @@ Goals:
 - stdlib-first (sqlite3, re, hashlib). rank_bm25 used if installed; else fallback.
 """
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 # NOTE: do NOT re-export submodule-level names here; doing so shadows the
 # submodule itself (e.g. `from mdq import search` would bind the function

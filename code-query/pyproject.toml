@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "code-query-gui"
-version = "0.2.0"
+version = "0.3.0"
 description = "Standalone management GUI for the Code Query Skill"
 requires-python = ">=3.11"
 license = { text = "MIT" }

@@ -24,6 +24,36 @@ _BODIES = ("script_block", "class_property_definition", "class_method_definition
 
 _PWSH_TIMEOUT_SECONDS = 30
 
+# Pester のテストブロックの先頭語。宣言構文ではなく単なるコマンド呼び出し。
+_PESTER_COMMANDS = frozenset({"Describe", "Context", "It"})
+
+
+def _pester_label(node, src) -> str:
+    """Label of a `Describe` / `Context` / `It` block, else `""`.
+
+    Keyed on the wrapping `pipeline`, not on the `command`: chunk naming only
+    consults node types listed in `Grammar.kinds` and stops descending once a
+    node fits the size budget, so keying on the command would leave the chunk's
+    `name` / `signature` columns empty -- the two highest BM25 weights.
+    """
+    command = node
+    while command is not None and command.type != "command":
+        command = next(iter(command.named_children), None)
+    if command is None:
+        return ""
+    name_node = ts.named_child_by_type(command, "command_name")
+    if name_node is None or ts.text(name_node, src) not in _PESTER_COMMANDS:
+        return ""
+    elements = ts.named_child_by_type(command, "command_elements")
+    if elements is None:
+        return ""
+    for element in elements.named_children:
+        text = ts.text(element, src).strip()
+        if not text or text.startswith("{"):
+            continue
+        return text[1:-1] if text[:1] in ("'", '"') else text
+    return ""
+
 # 定義と呼び出しだけを JSON で返す。`ParseInput` は構文解析のみで実行しない。
 _PWSH_AST_SCRIPT = r"""
 $ErrorActionPreference = 'Stop'
@@ -82,15 +112,26 @@ $stdout.Flush()
 
 
 def _name(node, src) -> str:
+    if node.type == "pipeline":
+        return _pester_label(node, src)
     target = ts.named_child_by_type(node, "function_name", "simple_name")
     return ts.text(target, src) if target is not None else ""
 
 
 def _signature(node, src) -> str:
+    if node.type == "pipeline":  # 本体まで含めるとブロック全体が 200 字の署名になる。
+        text = " ".join(ts.text(node, src).split())
+        brace = text.find("{")
+        return (text[:brace] if brace >= 0 else text).strip()[:200]
     body = ts.named_child_by_type(node, *_BODIES)
     end = body.start_byte if body is not None else node.end_byte
     text = " ".join(src[node.start_byte : end].decode("utf-8", "replace").split())
     return text.rstrip("{ ")[:200]
+
+
+def _is_test(node, src, name: str) -> bool:
+    # `_name` が Pester 以外の pipeline を既に除外している。
+    return node.type == "pipeline"
 
 
 def _callee(node, src) -> str:
@@ -105,11 +146,13 @@ GRAMMAR = ts.Grammar(
         **_TYPES,
         "function_statement": "function",
         "class_method_definition": "method",
+        "pipeline": "function",  # only fires for Pester blocks per `_name`
     },
     scopes=_TYPES,
     name_of=_name,
     scope_name_of=_name,
     doc_markers=("#",),
+    is_test_of=_is_test,
     signature_of=_signature,
     # `Import-Module` や `using module` も文法上はただの command なので、
     # import ではなく参照として記録される。

@@ -325,37 +325,13 @@ def _finalize(
 def discover_available_strategies(repo_root) -> set[str]:
     """Return the set of strategies whose per-(lang, strategy) DB exists.
 
-    Looks at ``.mdq/index-*-*.sqlite`` filenames. Language is ignored here;
-    a strategy is available if ANY language has its DB present. Callers
-    pass the result to :func:`classify_query` so the router can fall back
-    gracefully when the chosen strategy was never indexed.
+    Language is ignored here; a strategy is available if ANY language has its
+    DB present. Callers pass the result to :func:`classify_query` so the router
+    can fall back gracefully when the chosen strategy was never indexed.
 
-    Filename convention is ``index-<lang>-<strategy>.sqlite`` where
-    ``<lang>`` itself may contain hyphens (e.g. ``ja-jp``). We therefore
-    match by KNOWN strategy suffix rather than naive split. The known set is
-    derived from :data:`mdq.strategies.ALL_STRATEGIES` so a newly added
-    strategy is discoverable without editing this function; ``graphrag`` is
-    excluded because it never writes to the SQLite store.
+    The filename layout is decoded by :func:`mdq.store.existing_index_dbs`,
+    which owns the ``index-<lang>-<strategy>.sqlite`` convention.
     """
-    from pathlib import Path as _P
+    from . import store as _store
 
-    from . import strategies as _strategies
-
-    # Longest suffix first so ``heading_recursive`` is not shadowed by ``heading``.
-    known = sorted(
-        (s for s in _strategies.ALL_STRATEGIES if s != "graphrag"),
-        key=len,
-        reverse=True,
-    )
-    out: set[str] = set()
-    base = _P(repo_root) / ".mdq"
-    if not base.exists():
-        return out
-    for f in base.glob("index-*-*.sqlite"):
-        stem = f.stem  # "index-<lang>-<strategy>"
-        # Match longest suffix first (heading_recursive before heading).
-        for strat in known:
-            if stem.endswith("-" + strat):
-                out.add(strat)
-                break
-    return out
+    return {strategy for _lang, strategy, _path in _store.existing_index_dbs(repo_root)}
