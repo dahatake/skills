@@ -6,7 +6,7 @@
 this repository the manifest has to be regenerated, otherwise `--verify` reports
 the fix as tampering.
 
-    python scripts/refresh-kit-manifest.py markdown-query code-query tool-search
+    python scripts/refresh-kit-manifest.py markdown-query code-query
     python scripts/refresh-kit-manifest.py --check markdown-query
 """
 
@@ -21,7 +21,7 @@ from pathlib import Path, PurePosixPath
 MANIFEST_NAME = "KIT-VERSION.json"
 SKIP_DIR_PREFIXES = (".venv",)
 # `results` holds benchmark and evaluation output produced inside the kit.
-SKIP_DIR_NAMES = {"__pycache__", "results", ".mdq", ".cq", ".toolsearch", ".git"}
+SKIP_DIR_NAMES = {"__pycache__", "results", ".mdq", ".cq", ".git"}
 
 
 def shipped_files(kit: Path) -> list[str]:

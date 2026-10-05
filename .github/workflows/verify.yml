@@ -20,13 +20,13 @@ jobs:
       - name: Kit payloads match KIT-VERSION.json
         run: |
           set -e
-          for kit in markdown-query code-query tool-search; do
+          for kit in markdown-query code-query; do
             echo "== $kit"
             python "$kit/install.py" --kit-dir "$kit" --verify
           done
 
       - name: KIT-VERSION.json is regenerated from the shipped files
-        run: python scripts/refresh-kit-manifest.py --check markdown-query code-query tool-search
+        run: python scripts/refresh-kit-manifest.py --check markdown-query code-query
 
       - name: Generated plugin assets are in sync
         run: python scripts/sync-plugin-assets.py --check
@@ -54,12 +54,10 @@ jobs:
           git -C "$demo" init -q
           git -C "$demo" add -A
           git -C "$demo" -c user.email=ci@example.com -c user.name=ci commit -qm init
-          for kit in markdown-query code-query tool-search; do
+          for kit in markdown-query code-query; do
             cp -r "$kit" "$demo/tools/kits/$kit"
             bash "$demo/tools/kits/$kit/install.sh" --skip-prereq --repo-root "$demo"
           done
-          cd "$demo"
-          bash tools/kits/tool-search/toolsearch.sh policy
 
       - name: Both indexes hold the repository, not the kits
         run: |
@@ -100,7 +98,7 @@ jobs:
           git -C $demo init -q
           git -C $demo add -A
           git -C $demo -c user.email=ci@example.com -c user.name=ci commit -qm init
-          foreach ($kit in 'markdown-query', 'code-query', 'tool-search') {
+          foreach ($kit in 'markdown-query', 'code-query') {
             Copy-Item -Recurse -Force $kit "$demo/tools/kits/$kit"
             & "$demo/tools/kits/$kit/install.ps1" -SkipPrereq -RepoRoot $demo
             if ($LASTEXITCODE -ne 0) { throw "$kit install failed with $LASTEXITCODE" }
@@ -116,8 +114,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'mdq.ps1 stats failed' }
           & "$demo/tools/kits/code-query/cq.ps1" stats | Out-Null
           if ($LASTEXITCODE -ne 0) { throw 'cq.ps1 stats failed' }
-          & "$demo/tools/kits/tool-search/toolsearch.ps1" policy | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw 'toolsearch.ps1 policy failed' }
           Pop-Location
           if ($env:PYTHONPATH -ne 'sentinel') { throw "PYTHONPATH leaked: $env:PYTHONPATH" }
 

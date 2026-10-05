@@ -515,7 +515,7 @@ def scan_file(repo_root: Path, file_path: Path,
 # unconditionally so that a repository cannot accidentally index thousands of
 # Markdown files shipped by its own dependencies.
 ALWAYS_EXCLUDED_DIRS: frozenset[str] = frozenset({
-    ".git", ".mdq", ".cq", ".toolsearch", "node_modules", "__pycache__",
+    ".git", ".mdq", ".cq", "node_modules", "__pycache__",
     "dist", "build", ".next", ".cache", "venv",
 })
 

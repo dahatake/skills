@@ -220,7 +220,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if enabled:
             argv_out.append(flag)
 
-    # Skill 定義を同梱していないキット（tool-search）では配置しない。
+    # Skill 定義を同梱していないキットでは配置しない。
     if not args.no_skill and (kit_dir / "skill" / "SKILL.md").is_file():
         argv_out.append("--install-skill")
     # 索引を持たないキットでは索引構築コマンド自体が無い。

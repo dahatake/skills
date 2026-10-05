@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- `tool-search` キットと関連する全て（`tool-search/`、`docs/tool-search.md`、
+  `README.md` の記述、CI のスモークテスト、`.gitattributes` / `.gitignore` /
+  `scripts/refresh-kit-manifest.py` の参照）。
+
 ## [0.2.0] - 2026-08-13
 
 ### Added

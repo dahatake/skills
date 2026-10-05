@@ -9,7 +9,6 @@ __pycache__/
 # Local index / telemetry each kit creates inside the target repository
 .mdq/
 .cq/
-.toolsearch/
 
 # Benchmark output
 markdown-query/results/

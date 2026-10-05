@@ -11,7 +11,6 @@
 # platform whose checkout rules differ from the one that produced the manifest.
 markdown-query/** -text
 code-query/** -text
-tool-search/** -text
 skills/** -text
 
 # ...except the shell entry points. Git for Windows defaults to
