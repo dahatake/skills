@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- リポジトリルートの配布物を Agent Plugins v1.0.0 に対応。標準スキーマを宣言する
+  `plugin.json`、`mcp.json`、マニフェスト検証スクリプト、Agent Skills 公式
+  validator を使う CI を追加した。
+
+### Changed
+
+- `code-query` / `markdown-query` の Skill frontmatter を Agent Skills 仕様に適合。
+  Claude Code 用マニフェストは、ポータブル `plugin.json` の閉じたスキーマを
+  壊さないよう互換メタデータとして個別生成する。
+
 ### Removed
 
 - `tool-search` キットと関連する全て（`tool-search/`、`docs/tool-search.md`、

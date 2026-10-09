@@ -13,8 +13,9 @@ description: >
   multi-file docs lookup; context window must be minimized.
 metadata:
   origin: user
-  version: 0.8.2
-category: planning
+  version: "0.8.2"
+license: MIT
+compatibility: Requires Python 3.11+ and git. Install the bundled markdown-query kit before use.
 ---
 
 # markdown-query

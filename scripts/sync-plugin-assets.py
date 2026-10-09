@@ -3,11 +3,12 @@
 
 Two mirrors exist because the plugin hosts require a fixed layout:
 
-* `skills/<kit>/`            <- `<kit>/skill/`   (declared by `plugin.json`)
-* `.claude-plugin/plugin.json` <- `plugin.json`  (Claude Code reads its own copy)
+* `skills/<kit>/`              <- `<kit>/skill/` (Agent Plugins discovery)
+* `.claude-plugin/plugin.json` <- `plugin.json` metadata plus Claude's `skills`
 
-Both are byte-for-byte copies, and `.gitattributes` marks them `-text` so the
-bytes survive a checkout on any platform.
+The portable root manifest follows Agent Plugins' closed schema. The Claude
+manifest is generated separately so its client-specific `skills` field does
+not make the portable manifest invalid.
 
     python scripts/sync-plugin-assets.py            # write the mirrors
     python scripts/sync-plugin-assets.py --check    # fail if out of sync
@@ -16,6 +17,7 @@ bytes survive a checkout on any platform.
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -88,8 +90,20 @@ def main(argv: list[str] | None = None) -> int:
     if not readme.is_file() or readme.read_bytes() != README_BYTES:
         drift.append("README.md (missing or modified)")
 
-    if not CLAUDE_PLUGIN_JSON.is_file() or CLAUDE_PLUGIN_JSON.read_bytes() != PLUGIN_JSON.read_bytes():
-        drift.append(".claude-plugin/plugin.json (out of sync with plugin.json)")
+    portable_manifest = json.loads(PLUGIN_JSON.read_text(encoding="utf-8"))
+    claude_manifest = {
+        key: value for key, value in portable_manifest.items() if key != "$schema"
+    }
+    claude_manifest["skills"] = "./skills/"
+    claude_manifest_bytes = (
+        json.dumps(claude_manifest, ensure_ascii=False, indent=2) + "\n"
+    ).encode("utf-8")
+
+    if (
+        not CLAUDE_PLUGIN_JSON.is_file()
+        or CLAUDE_PLUGIN_JSON.read_bytes() != claude_manifest_bytes
+    ):
+        drift.append(".claude-plugin/plugin.json (out of sync with portable plugin metadata)")
 
     if args.check:
         if drift:
@@ -117,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
     readme.write_bytes(README_BYTES)
     print("wrote skills/README.md")
 
-    CLAUDE_PLUGIN_JSON.write_bytes(PLUGIN_JSON.read_bytes())
+    CLAUDE_PLUGIN_JSON.write_bytes(claude_manifest_bytes)
     print("wrote .claude-plugin/plugin.json")
     return 0
 

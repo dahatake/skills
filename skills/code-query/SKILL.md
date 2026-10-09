@@ -8,8 +8,9 @@ description: >
   WHEN: where something lives or what calls what; multi-file lookup; tight context.
 metadata:
   origin: user
-  version: 0.4.2
-category: planning
+  version: "0.4.2"
+license: MIT
+compatibility: Requires Python 3.11+ and git. Install the bundled code-query kit before use.
 ---
 
 # code-query

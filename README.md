@@ -255,9 +255,13 @@ bash tools/kits/markdown-query/install.sh
 
 生成済みの `mdq.toml` / `cq.toml` / Skill 定義は温存されます（`--force` を付けると再生成されます）。venv はキット内にあるため削除され、再実行時に作り直されます。
 
-## 7. プラグインとしての配布（任意）
+## 7. Agent Plugin としての配布（任意）
 
 `markdown-query` / `code-query` の SKILL.md は、プラグインとしてエージェントへ配布することもできます。
+リポジトリルートは [Agent Plugins v1.0.0](https://agent-plugins.org/specification)
+に準拠するポータブルパッケージです。`plugin.json` がパッケージを識別し、
+`skills/` の 2 Skill と `mcp.json`（現在はサーバー定義なし）を標準の固定パスで公開します。
+Claude Code / Gemini CLI / APM 向けの既存メタデータも互換レイヤーとして維持しています。
 
 ```bash
 # APM（複数ハーネス対応）
@@ -290,10 +294,11 @@ skills/                       プラグイン配布用の SKILL.md（生成物�
 scripts/                      メンテナンス用スクリプト
 sample/                       検索対象のサンプル Markdown
 plugin.json                   プラグイン定義（Copilot CLI / 共通）
+mcp.json                      Agent Plugins v1.0.0 の MCP 設定（現状は空）
 apm.yml                       APM マーケットプレイス定義
 .claude-plugin/               Claude Code 用のプラグイン定義とマーケットプレイス
 gemini-extension.json         Gemini CLI 拡張定義
-.mcp.json                     MCP サーバー設定（現状は空）
+.mcp.json                     従来クライアント向け MCP 設定（現状は空）
 .github/workflows/verify.yml  CI（キット整合性・生成物同期・スモークインストール）
 ```
 
@@ -319,6 +324,8 @@ gemini-extension.json         Gemini CLI 拡張定義
 |---|---|
 | キットのファイルを変更した後 | `python scripts/refresh-kit-manifest.py markdown-query code-query` |
 | `<kit>/skill/` または `plugin.json` を変更した後 | `python scripts/sync-plugin-assets.py` |
+| Agent Plugins マニフェストの検証 | `python scripts/validate-agent-plugin.py` |
+| Agent Skill の検証 | `agentskills validate skills/markdown-query`<br>`agentskills validate skills/code-query` |
 | 生成物が最新かの確認（CI と同じ） | `python scripts/refresh-kit-manifest.py --check markdown-query code-query`<br>`python scripts/sync-plugin-assets.py --check` |
 
 - `install.ps1` / `install.py` / `install.sh` / `kit/` は 2 キットでバイト同一に保ってください。一方を編集したら他方へコピーします。
