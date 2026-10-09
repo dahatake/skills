@@ -33,21 +33,6 @@ python -m cq refs   --profile <profile> --symbol <symbol>
 python -m cq get    --profile <profile> --chunk-id <ID>
 ```
 
-> **`python -m cq` が `No module named cq` で失敗する場合**（配布キットで導入したリポジトリ）
-> エンジンはキット同梱の `vendor/` にあり、システムの Python からは見えない。
-> 同梱ランチャを使う。サブコマンドと引数は同一で、出力も同じ。
->
-> ```pwsh
-> <kit>\cq.ps1 search --q "<探したい語>"       # Windows
-> ```
->
-> ```sh
-> bash <kit>/cq.sh search --q "<探したい語>"   # macOS / Linux
-> ```
->
-> `<kit>` は `code-query` キットを配置したディレクトリ（例: `tools/kits/code-query`）。
-> 見つからない場合はこのリポジトリに未導入。リポジトリの README を参照すること。
-
 - `search` は `--q`、`def` / `refs` は `--symbol` を使う。`def` / `refs` に `--q` を渡さない。
 - `--profile` は `cq.toml` の `[profiles.<name>]` を選ぶ。存在しない設定や索引は fail-closed で停止し、黙って空結果にしない。
 - `get` は `search` の snippet で足りないときだけ、返された `chunk_id` の本文を取得する。

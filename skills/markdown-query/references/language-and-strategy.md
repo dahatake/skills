@@ -1,4 +1,4 @@
-# 言語とチャンキング戦略の選択ガイド
+﻿# 言語とチャンキング戦略の選択ガイド
 
 `mdq` は **言語（`--lang`）** と **チャンキング戦略（`--strategy`）** の組合せごとに別 DB ファイル `.mdq/index-<lang>-<strategy>.sqlite` を作成する。本書はそれぞれの選び方と実装上の挙動を説明する。
 
@@ -6,7 +6,7 @@
 
 ## 1. 言語選択（`--lang`）
 
-実装位置: `mdq/tokenize.py`
+実装位置: [mdq/tokenize.py](../../../../mdq/tokenize.py)
 
 | 値 | 既定 | FTS5 トークナイザ | フォールバック | 想定対象 |
 |---|---|---|---|---|
@@ -32,7 +32,7 @@
 
 ## 2. チャンキング戦略選択（`--strategy`）
 
-実装位置: `mdq/strategies.py`
+実装位置: [mdq/strategies.py](../../../../mdq/strategies.py)
 
 | 戦略 | 既定 | チャンク境界 | 1 チャンクサイズ | 推奨ユースケース |
 |---|---|---|---|---|
@@ -77,7 +77,7 @@
 
 ## 3. 検索エンジン選択（`--engine`）
 
-実装位置: `mdq/search.py` / `mdq/store.py`
+実装位置: [mdq/search.py](../../../../mdq/search.py) / [mdq/store.py](../../../../mdq/store.py)
 
 | 値 | 既定 | 挙動 |
 |---|---|---|
@@ -91,7 +91,7 @@
 
 ### いつ FTS5 へ切り替えるか
 - `mdq stats` で `chunks` が概ね数千件を超え、`search` のレイテンシが体感できるようになったとき。
-- benchmark スクリプト `<kit>/benchmark.py` で実測比較する（捏造禁止のため数値は実測値を採用）。
+- benchmark スクリプト `tools/skills/markdown_query/benchmark.py` で実測比較する（捏造禁止のため数値は実測値を採用）。
 
 ---
 
@@ -118,7 +118,7 @@
 
 ## 5. SCHEMA バージョンとマイグレーション
 
-実装位置: `mdq/store.py`（`SCHEMA_VERSION = 7`）
+実装位置: [mdq/store.py](../../../../mdq/store.py)（`SCHEMA_VERSION = 7`）
 
 | 世代 | 内容 | 移行挙動 |
 |---|---|---|

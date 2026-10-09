@@ -1,4 +1,4 @@
-# Prompt / Custom Agent への組み込み例
+﻿# Prompt / Custom Agent への組み込み例
 
 ## Prompt スニペット（Copilot Chat / 他 Agent ホスト共通）
 

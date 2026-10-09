@@ -21,7 +21,7 @@ python -m mdq index [--root PATH ...] [--rebuild] [--no-prune]
                     [--no-semantic-contextualize] [--late-chunking]
 ```
 
-- `--root`: 索引対象ルート（繰り返し指定可）。省略時は `mdq.toml` / `.mdq/config.toml` の `[index].roots` を参照し、なければ最小デフォルト（`mdq.config.GENERIC_DEFAULT_ROOTS` = `docs`, `users-guide`）。存在しないフォルダは自動スキップ。HVE リポジトリでの宣言例は repo-specific/hve-defaults.md（上流リポジトリ専用のため本キットには同梱していない） を参照。
+- `--root`: 索引対象ルート（繰り返し指定可）。省略時は `mdq.toml` / `.mdq/config.toml` の `[index].roots` を参照し、なければ最小デフォルト（`mdq.config.GENERIC_DEFAULT_ROOTS` = `docs`, `users-guide`）。存在しないフォルダは自動スキップ。利用側リポジトリの宣言を確認する。
 - `--rebuild`: SHA-1 が同一でも強制再索引。
 - `--no-prune`: 索引ストアに残っているがディスク上に存在しないファイルを削除しない。
 - `--max-chunk-chars N`: 2 次分割閾値（文字数）。`heading` / `heading_recursive` の双方で機能し、`heading_recursive` 時は既定 `2000` を上書きする。`fixed_window` 戦略には影響しない。`semantic_paragraph` では MAX_CHARS（既定 `1000`）を上書き。`0` = オフ（既定、未分割）。
@@ -99,7 +99,7 @@ python -m mdq watch [--root PATH ...] [--debounce-ms 500]
 ```
 
 - `watchdog` で `.md` の追加 / 更新 / 削除を検知し、`.mdq/index-*.sqlite` を逐次更新する。
-- HVE CLI Orchestrator は同名の `MdqWatcher` をデーモンスレッドとして内包しているため、通常は本コマンドを手動起動する必要はない（独立させたい場合 / 開発時の追跡用）。
+- 索引 watcher を組み込む実行環境では、利用側の運用規則を確認し、同じ索引を更新する watcher の重複起動を避ける。
 - `--initial-index`: watch 開始前に `build_index` を 1 回実行。
 - Ctrl+C で停止。Cloud Agent / GitHub Actions では使用しない（ファイルシステム揮発）。
 

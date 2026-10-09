@@ -28,21 +28,6 @@ python -m mdq search --q "<場所だけ知りたい語>" --paths "docs/**" --top
 python -m mdq get --chunk-id <返ってきた ID> --strategy heading
 ```
 
-> **`python -m mdq` が `No module named mdq` で失敗する場合**（配布キットで導入したリポジトリ）
-> エンジンはキット同梱の `vendor/` にあり、システムの Python からは見えない。
-> 同梱ランチャを使う。サブコマンドと引数は同一で、出力も同じ。
->
-> ```pwsh
-> <kit>\mdq.ps1 search --q "<キーワード>"       # Windows
-> ```
->
-> ```sh
-> bash <kit>/mdq.sh search --q "<キーワード>"   # macOS / Linux
-> ```
->
-> `<kit>` は `markdown-query` キットを配置したディレクトリ（例: `tools/kits/markdown-query`）。
-> 見つからない場合はこのリポジトリに未導入。リポジトリの README を参照すること。
-
 - `search` だけは `--strategy auto` が既定。`mdq.query_router` がクエリから戦略を選び、該当 DB が無ければ実在 DB へフォールバックする。詳細は [references/query-routing.md](references/query-routing.md)。
 - `stats` / `get` / `list` / `index` / `watch` では、対象 DB に合わせて `--strategy heading|heading_recursive|fixed_window|semantic_paragraph|pageindex` を明示する（`auto` は `search` 専用）。CLI の全オプションは [references/cli-reference.md](references/cli-reference.md)。
 - `get` の `--strategy` は検索時に実際に使った DB と合わせる。迷う場合は、本文取得前に `search --return-unit chunk` で必要範囲だけ広げる方が安全。

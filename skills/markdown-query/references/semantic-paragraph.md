@@ -1,12 +1,12 @@
 # `semantic_paragraph` 戦略
 
-Embedding 類似度に基づくチャンキング戦略。設計プラン: `work/semantic-paragraph/plan.md`（上流リポジトリ専用）。
+Embedding 類似度に基づくチャンキング戦略。設計プラン: [work/semantic-paragraph/plan.md](../../../../work/semantic-paragraph/plan.md)。
 
 ## 1. 概要
 
 | 項目 | 値 |
 |---|---|
-| 実装 | `mdq/strategies_semantic.py` |
+| 実装 | [mdq/strategies_semantic.py](../../../../mdq/strategies_semantic.py) |
 | extras | `pip install -e .[semantic]`（fastembed + nltk + numpy） |
 | 既定 provider | `fastembed`（ONNX, CPU。`MDQ_EMBED_PROVIDER` で override） |
 | 既定 model | `intfloat/multilingual-e5-large`（多言語・MIT・初回 ~2.2GB DL。`MDQ_EMBED_MODEL` で override） |
@@ -41,7 +41,7 @@ python -m mdq index --strategy semantic_paragraph \
     [--late-chunking]
 ```
 
-すべて Q8=A の方針に従い CLI から上書き可能。未指定値は ``mdq/strategies_semantic.py`` の `SEMANTIC_*` 定数が既定。
+すべて Q8=A の方針に従い CLI から上書き可能。未指定値は [`mdq/strategies_semantic.py`](../../../../mdq/strategies_semantic.py) の `SEMANTIC_*` 定数が既定。
 
 検索側は late chunking がある index に対し:
 

@@ -1,6 +1,6 @@
 # `graphrag` 戦略
 
-LightRAG（[lightrag-hku](https://github.com/HKUDS/LightRAG)）をバックエンドにした knowledge-graph 検索戦略。実装は ``mdq/strategies_graphrag.py``（adapter）と ``mdq/graphrag_runtime.py``（LLM/embed callable factory）に分離されています。
+LightRAG（[lightrag-hku](https://github.com/HKUDS/LightRAG)）をバックエンドにした knowledge-graph 検索戦略。実装は [`mdq/strategies_graphrag.py`](../../../../mdq/strategies_graphrag.py)（adapter）と [`mdq/graphrag_runtime.py`](../../../../mdq/graphrag_runtime.py)（LLM/embed callable factory）に分離されています。
 
 > ⚠️ この戦略は **任意（オプション）** です。既定の `heading` / `semantic_paragraph` / `pageindex` で十分なケースが大半です。`graphrag` はエンティティ抽出と関係グラフ構築のために LLM を呼び出すため、コスト・実行時間ともに大幅に高くなります。
 
@@ -8,9 +8,9 @@ LightRAG（[lightrag-hku](https://github.com/HKUDS/LightRAG)）をバックエ�
 
 | 項目 | 値 |
 |---|---|
-| 実装 (adapter) | `mdq/strategies_graphrag.py` |
-| 実装 (LLM/embed runtime) | `mdq/graphrag_runtime.py` |
-| 実装 (indexer 分岐) | `mdq/indexer.py` `build_graphrag_index()` |
+| 実装 (adapter) | [mdq/strategies_graphrag.py](../../../../mdq/strategies_graphrag.py) |
+| 実装 (LLM/embed runtime) | [mdq/graphrag_runtime.py](../../../../mdq/graphrag_runtime.py) |
+| 実装 (indexer 分岐) | [mdq/indexer.py](../../../../mdq/indexer.py) `build_graphrag_index()` |
 | extras | `pip install -e .[graphrag]`（`lightrag-hku>=1.4.16,<1.5`） |
 | 既定 LLM provider | `ollama`（`--graphrag-llm-provider mock` でテスト用 stub） |
 | 既定 LLM model | `qwen2.5:7b` |

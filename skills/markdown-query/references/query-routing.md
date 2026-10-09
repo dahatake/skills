@@ -1,6 +1,6 @@
 # Auto Strategy Routing（`--strategy auto`）
 
-`python -m mdq search --strategy auto` を指定すると、Skill 側のルーティングモジュール ``mdq/query_router.py`` がユーザークエリから最適な chunking strategy を選択する。クエリインタフェースは strategy で分岐しないため、呼び出し側（Agent / Skill）は `auto` のみを意識すればよい。
+`python -m mdq search --strategy auto` を指定すると、Skill 側のルーティングモジュール [`mdq/query_router.py`](../../../../mdq/query_router.py) がユーザークエリから最適な chunking strategy を選択する。クエリインタフェースは strategy で分岐しないため、呼び出し側（Agent / Skill）は `auto` のみを意識すればよい。
 
 > **設計原則**: ローカル完結（LLM 呼び出しなし）の純ルールベース。判定根拠は `RouterDecision` として返却され、`mdq.usage_log` に `router_reason` / `router_rule_id` / `router_fallback_used` として記録される。
 
@@ -47,7 +47,7 @@ class RouterDecision:
 
 ## 4. 統計集計（usage_stats H1）
 
-``mdq/usage_stats.py`` の `_group_routing()` が `auto` 実行ログを集計し、以下のキーで返す:
+[`mdq/usage_stats.py`](../../../../mdq/usage_stats.py) の `_group_routing()` が `auto` 実行ログを集計し、以下のキーで返す:
 
 ```jsonc
 {
